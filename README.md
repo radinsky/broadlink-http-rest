@@ -13,3 +13,15 @@ Usage:
 
 http://localhost:8080/learnCommand/lampon   #learn command with name lampon
 http://localhost:8080/sendCommand/lampon   #send command with name lampon
+
+4) Added get temperature from supported devices (like RM2/Pro):
+
+http://localhost:8080/getStatus/temp
+
+Returns:
+
+{
+    "temperature": 22.2
+}
+
+* required JSON format suites homebridge-http-temperature plugin.

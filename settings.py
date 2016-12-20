@@ -1,13 +1,13 @@
 import configparser
 from os import path
 
-ApplicationDir = path.dirname(path.abspath(__file__))
-BlackBeanControlSettings = path.join(ApplicationDir, 'settings.ini')
+applicationDir = path.dirname(path.abspath(__file__))
+BlackBeanControlSettings = path.join(applicationDir, 'settings.ini')
 
-Settings = configparser.ConfigParser()
-Settings.read(BlackBeanControlSettings)
+settings = configparser.ConfigParser()
+settings.read(BlackBeanControlSettings)
 
-IPAddress = Settings.get('General', 'IPAddress')
-Port = Settings.get('General', 'Port')
-MACAddress = Settings.get('General', 'MACAddress')
-Timeout = Settings.get('General', 'Timeout')
+IPAddress = settings.get('General', 'IPAddress')
+Port = settings.get('General', 'Port')
+MACAddress = settings.get('General', 'MACAddress')
+Timeout = settings.get('General', 'Timeout')

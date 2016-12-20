@@ -37,54 +37,77 @@ class Server(BaseHTTPRequestHandler):
             else:
                 self.wfile.write("Sent: %s" % commandName)
 
+        elif 'getStatus' in self.path:
+            if 'temp' in self.path:
+                result = getTempRM()
+                if result == False:
+                    self.wfile.write("Failed: Can not get temperature")
+                else:
+                    self.wfile.write('''{
+    "temperature": %s
+}''' % result)
+            else:
+                self.wfile.write("Failed: Unknonwn command")
+
         else:
             self.wfile.write("Failed")
 
+
 def sendCommand(commandName):
-    RM3Device = broadlink.rm((RealIPAddress, RealPort), RealMACAddress)
-    RM3Device.auth()
+    device = broadlink.rm((realIPAddress, realPort), realMACAddress)
+    device.auth()
 
-    RM3Key = RM3Device.key
-    RM3IV = RM3Device.iv
+    deviceKey = device.key
+    deviceIV = device.iv
 
-    if SettingsFile.has_option('Commands', commandName):
-        CommandFromSettings = SettingsFile.get('Commands', commandName)
+    if settingsFile.has_option('Commands', commandName):
+        commandFromSettings = settingsFile.get('Commands', commandName)
     else:
         return False
 
-    if CommandFromSettings.strip() != '':
-        DecodedCommand = binascii.unhexlify(CommandFromSettings)
-        AESEncryption = AES.new(str(RM3Key), AES.MODE_CBC, str(RM3IV))
-        EncodedCommand = AESEncryption.encrypt(str(DecodedCommand))
+    if commandFromSettings.strip() != '':
+        decodedCommand = binascii.unhexlify(commandFromSettings)
+        AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
+        encodedCommand = AESEncryption.encrypt(str(decodedCommand))
         
-        FinalCommand = EncodedCommand[0x04:]    
-        RM3Device.send_data(FinalCommand)
+        finalCommand = encodedCommand[0x04:]    
+        device.send_data(finalCommand)
+        return True
 
 def learnCommand(commandName):
-    RM3Device = broadlink.rm((RealIPAddress, RealPort), RealMACAddress)
-    RM3Device.auth()
+    device = broadlink.rm((realIPAddress, realPort), realMACAddress)
+    device.auth()
 
-    RM3Key = RM3Device.key
-    RM3IV = RM3Device.iv
+    deviceKey = device.key
+    deviceIV = device.iv
 
-    RM3Device.enter_learning()
+    device.enter_learning()
     time.sleep(RealTimeout)
-    LearnedCommand = RM3Device.check_data()
+    LearnedCommand = device.check_data()
 
     if LearnedCommand is None:
         print('Command not received')
         return False
 
     AdditionalData = bytearray([0x00, 0x00, 0x00, 0x00])    
-    FinalCommand = AdditionalData + LearnedCommand
+    finalCommand = AdditionalData + LearnedCommand
 
-    AESEncryption = AES.new(str(RM3Key), AES.MODE_CBC, str(RM3IV))
-    DecodedCommand = binascii.hexlify(AESEncryption.decrypt(str(FinalCommand)))
+    AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
+    decodedCommand = binascii.hexlify(AESEncryption.decrypt(str(finalCommand)))
 
-    BlackBeanControlIniFile = open(path.join(settings.ApplicationDir, 'settings.ini'), 'w')    
-    SettingsFile.set('Commands', commandName, DecodedCommand)
-    SettingsFile.write(BlackBeanControlIniFile)
+    BlackBeanControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
+    settingsFile.set('Commands', commandName, decodedCommand)
+    settingsFile.write(BlackBeanControlIniFile)
     BlackBeanControlIniFile.close()
+    return True
+
+def getTempRM():
+    device = broadlink.rm((realIPAddress, realPort), realMACAddress)
+    device.auth()
+    temperature = device.check_temperature()
+    if temperature:
+        return temperature
+    return False 
 
         
 def start(server_class=HTTPServer, handler_class=Server, port=8080):
@@ -95,88 +118,88 @@ def start(server_class=HTTPServer, handler_class=Server, port=8080):
 
 if __name__ == "__main__":
 
-    SettingsFile = configparser.ConfigParser()
-    SettingsFile.optionxform = str
-    SettingsFile.read(settings.BlackBeanControlSettings)
+    settingsFile = configparser.ConfigParser()
+    settingsFile.optionxform = str
+    settingsFile.read(settings.BlackBeanControlSettings)
 
     commandName = ''
-    DeviceName=''
-    DeviceIPAddress = ''
-    DevicePort = ''
-    DeviceMACAddres = ''
-    DeviceTimeout = ''
-    AlternativeIPAddress = ''
-    AlternativePort = ''
-    AlternativeMACAddress = ''
-    AlternativeTimeout = ''
+    deviceName=''
+    deviceIPAddress = ''
+    devicePort = ''
+    deviceMACAddres = ''
+    deviceTimeout = ''
+    alternativeIPAddress = ''
+    alternativePort = ''
+    alternativeMACAddress = ''
+    alternativeTimeout = ''
 
-    if (DeviceName.strip() != '') and ((AlternativeIPAddress.strip() != '') or (AlternativePort.strip() != '') or (AlternativeMACAddress.strip() != '') or (AlternativeTimeout != '')):
+    if (deviceName.strip() != '') and ((alternativeIPAddress.strip() != '') or (alternativePort.strip() != '') or (alternativeMACAddress.strip() != '') or (alternativeTimeout != '')):
         print('Device name parameter can not be used in conjunction with IP Address/Port/MAC Address/Timeout parameters')
         sys.exit(2)
 
-    if (((AlternativeIPAddress.strip() != '') or (AlternativePort.strip() != '') or (AlternativeMACAddress.strip() != '') or (AlternativeTimeout.strip() != '')) and ((AlternativeIPAddress.strip() == '') or (AlternativePort.strip() == '') or (AlternativeMACAddress.strip() == '') or (AlternativeTimeout.strip() == ''))):
+    if (((alternativeIPAddress.strip() != '') or (alternativePort.strip() != '') or (alternativeMACAddress.strip() != '') or (alternativeTimeout.strip() != '')) and ((alternativeIPAddress.strip() == '') or (alternativePort.strip() == '') or (alternativeMACAddress.strip() == '') or (alternativeTimeout.strip() == ''))):
         print('IP Address, Port, MAC Address and Timeout parameters can not be used separately')
         sys.exit(2)
 
-    if DeviceName.strip() != '':
-        if SettingsFile.has_section(DeviceName.strip()):
-            if SettingsFile.has_option(DeviceName.strip(), 'IPAddress'):
-                DeviceIPAddress = SettingsFile.get(DeviceName.strip(), 'IPAddress')
+    if deviceName.strip() != '':
+        if settingsFile.has_section(deviceName.strip()):
+            if settingsFile.has_option(deviceName.strip(), 'IPAddress'):
+                deviceIPAddress = settingsFile.get(deviceName.strip(), 'IPAddress')
             else:
-                DeviceIPAddress = ''
+                deviceIPAddress = ''
 
-            if SettingsFile.has_option(DeviceName.strip(), 'Port'):
-                DevicePort = SettingsFile.get(DeviceName.strip(), 'Port')
+            if settingsFile.has_option(deviceName.strip(), 'Port'):
+                devicePort = settingsFile.get(deviceName.strip(), 'Port')
             else:
-                DevicePort = ''
+                devicePort = ''
 
-            if SettingsFile.has_option(DeviceName.strip(), 'MACAddress'):
-                DeviceMACAddress = SettingsFile.get(DeviceName.strip(), 'MACAddress')
+            if settingsFile.has_option(deviceName.strip(), 'MACAddress'):
+                deviceMACAddress = settingsFile.get(deviceName.strip(), 'MACAddress')
             else:
-                DeviceMACAddress = ''
+                deviceMACAddress = ''
 
-            if SettingsFile.has_option(DeviceName.strip(), 'Timeout'):
-                DeviceTimeout = SettingsFile.get(DeviceName.strip(), 'Timeout')
+            if settingsFile.has_option(deviceName.strip(), 'Timeout'):
+                deviceTimeout = settingsFile.get(deviceName.strip(), 'Timeout')
             else:
-                DeviceTimeout = ''        
+                deviceTimeout = ''        
         else:
             print('Device does not exist in settings.ini')
             sys.exit(2)
 
-    if (DeviceName.strip() != '') and (DeviceIPAddress.strip() == ''):
+    if (deviceName.strip() != '') and (deviceIPAddress.strip() == ''):
         print('IP address must exist in settings.ini for the selected device')
         sys.exit(2)
 
-    if (DeviceName.strip() != '') and (DevicePort.strip() == ''):
+    if (deviceName.strip() != '') and (devicePort.strip() == ''):
         print('Port must exist in settings.ini for the selected device')
         sys.exit(2)
 
-    if (DeviceName.strip() != '') and (DeviceMACAddress.strip() == ''):
+    if (deviceName.strip() != '') and (deviceMACAddress.strip() == ''):
         print('MAC address must exist in settings.ini for the selected device')
         sys.exit(2)
 
-    if (DeviceName.strip() != '') and (DeviceTimeout.strip() == ''):
+    if (deviceName.strip() != '') and (deviceTimeout.strip() == ''):
         print('Timeout must exist in settings.ini for the selected device')
         sys.exit(2)    
 
-    RealIPAddress = settings.IPAddress
-    if RealIPAddress.strip() == '':
+    realIPAddress = settings.IPAddress
+    if realIPAddress.strip() == '':
         print('IP address must exist in settings.ini or it should be entered as a command line parameter')
         sys.exit(2)
 
-    RealPort = settings.Port
-    if RealPort.strip() == '':
+    realPort = settings.Port
+    if realPort.strip() == '':
         print('Port must exist in settings.ini or it should be entered as a command line parameter')
         sys.exit(2)
     else:
-        RealPort = int(RealPort.strip())
+        realPort = int(realPort.strip())
 
-    RealMACAddress = settings.MACAddress
-    if RealMACAddress.strip() == '':
+    realMACAddress = settings.MACAddress
+    if realMACAddress.strip() == '':
         print('MAC address must exist in settings.ini or it should be entered as a command line parameter')
         sys.exit(2)
     else:
-        RealMACAddress = netaddr.EUI(RealMACAddress)
+        realMACAddress = netaddr.EUI(realMACAddress)
 
     RealTimeout = settings.Timeout
     if RealTimeout.strip() == '':
