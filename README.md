@@ -44,3 +44,9 @@ Returns:
 and etc..
 ```
 *required JSON format suites [homebridge-http-temperature](https://github.com/metbosch/homebridge-http-temperature) plugin.
+
+6) Get and Set status of devices having COMMANDon and COMMANDoff abilities
+```
+http://localhost:8080/sendCommand/lampon #automaticly set status of "lamp" to "on"
+http://localhost:8080/getStatus/lamp     #return lamp status as 0 or 1
+```
