@@ -36,16 +36,33 @@ class Server(BaseHTTPRequestHandler):
                 self.wfile.write("Failed: Unknonwn command")
             else:
                 self.wfile.write("Sent: %s" % commandName)
+                if 'on' or 'off' in commandName:
+                    status = commandName.rsplit('o', 1)[1]
+
+                    realcommandName = commandName.rsplit('o', 1)[0]
+                    print(status,realcommandName)
+                    if 'n' in status:
+                        setStatus(realcommandName, 'on')
+                    if 'ff' in status:
+                        setStatus(realcommandName, 'off')
+
 
         elif 'getStatus' in self.path:
-            if 'temp' in self.path:
+            commandName = self.path.split('/')[2]
+            if 'temp' in commandName:
                 result = getTempRM()
                 if result == False:
                     self.wfile.write("Failed: Can not get temperature")
                 else:
                     self.wfile.write('''{ "temperature": %s }''' % result)
             else:
-                self.wfile.write("Failed: Unknonwn command")
+                status = getStatus(commandName)
+                if status == 'on':
+                    self.wfile.write("{ 1 }")
+                elif status == 'off':
+                    self.wfile.write("{ 0 }")
+                else:
+                    self.wfile.write("Failed: Unknonwn command")
 
         elif 'a1' or 'A1' in self.path:
             sensor = self.path.split('/')[2]
@@ -106,6 +123,20 @@ def learnCommand(commandName):
     settingsFile.write(broadlinkControlIniFile)
     broadlinkControlIniFile.close()
     return True
+
+def setStatus(commandName, status):
+    broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
+    settingsFile.set('Status', commandName, status)
+    settingsFile.write(broadlinkControlIniFile)
+    broadlinkControlIniFile.close()
+    return True
+
+def getStatus(commandName):
+    if settingsFile.has_option('Status', commandName):
+        status = settingsFile.get('Status', commandName)
+        return status
+    else:
+        return False
 
 def getTempRM():
     device = broadlink.rm((RMIPAddress, RMPort), RMMACAddress)
