@@ -2,12 +2,17 @@ import configparser
 from os import path
 
 applicationDir = path.dirname(path.abspath(__file__))
-BlackBeanControlSettings = path.join(applicationDir, 'settings.ini')
+settingsINI = path.join(applicationDir, 'settings.ini')
 
 settings = configparser.ConfigParser()
-settings.read(BlackBeanControlSettings)
+settings.read(settingsINI)
 
-IPAddress = settings.get('General', 'IPAddress')
-Port = settings.get('General', 'Port')
-MACAddress = settings.get('General', 'MACAddress')
 Timeout = settings.get('General', 'Timeout')
+
+RMIPAddress = settings.get('BroadlinkRM', 'IPAddress')
+RMPort = settings.get('BroadlinkRM', 'Port')
+RMMACAddress = settings.get('BroadlinkRM', 'MACAddress')
+
+A1IPAddress = settings.get('BroadlinkA1', 'IPAddress')
+A1Port = settings.get('BroadlinkA1', 'Port')
+A1MACAddress = settings.get('BroadlinkA1', 'MACAddress')

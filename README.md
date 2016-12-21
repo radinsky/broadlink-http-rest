@@ -25,3 +25,12 @@ Returns:
 }
 
 * required JSON format suites homebridge-http-temperature plugin.
+
+5) Added support for A1 sensors (temperature, lights and etc..)
+
+http://localhost:8080/a1/temperature
+http://localhost:8080/a1/lights
+http://localhost:8080/a1/noise
+and etc..
+
+
