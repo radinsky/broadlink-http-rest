@@ -42,9 +42,9 @@ class Server(BaseHTTPRequestHandler):
                     realcommandName = commandName.rsplit('o', 1)[0]
                     print(status,realcommandName)
                     if 'n' in status:
-                        setStatus(realcommandName, 'on')
+                        setStatus(realcommandName, '1')
                     if 'ff' in status:
-                        setStatus(realcommandName, 'off')
+                        setStatus(realcommandName, '0')
 
 
         elif 'getStatus' in self.path:
@@ -54,17 +54,24 @@ class Server(BaseHTTPRequestHandler):
                 if result == False:
                     self.wfile.write("Failed: Can not get temperature")
                 else:
-                    self.wfile.write('''{ "temperature": %s }''' % result)
+                    self.wfile.write('''{ "temperature": %s } ''' % result)
             else:
                 status = getStatus(commandName)
-                if status == 'on':
-                    self.wfile.write("{ 1 }")
-                elif status == 'off':
-                    self.wfile.write("{ 0 }")
+                if (status):
+                    self.wfile.write(status)
                 else:
                     self.wfile.write("Failed: Unknonwn command")
+        
+        elif 'setStatus' in self.path:
+            commandName = self.path.split('/')[2]
+            status = self.path.split('/')[3]
+            result = setStatus(commandName, status)
+            if (result):
+                self.wfile.write("Set status of %s to %s" % (commandName, status))
+            else:
+                self.wfile.write("Failed: Unknonwn command")
 
-        elif 'a1' or 'A1' in self.path:
+        elif 'a1'  in self.path:
             sensor = self.path.split('/')[2]
             result = getA1Sensor(sensor)
             if result == False:
@@ -125,11 +132,18 @@ def learnCommand(commandName):
     return True
 
 def setStatus(commandName, status):
-    broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
-    settingsFile.set('Status', commandName, status)
-    settingsFile.write(broadlinkControlIniFile)
-    broadlinkControlIniFile.close()
-    return True
+    if settingsFile.has_option('Status', commandName):
+        commandFromSettings = settingsFile.get('Status', commandName)
+    else:
+        return False
+    if commandFromSettings.strip() != '':
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
+        settingsFile.set('Status', commandName, status)
+        settingsFile.write(broadlinkControlIniFile)
+        broadlinkControlIniFile.close()
+        return True
+    else:
+        return False
 
 def getStatus(commandName):
     if settingsFile.has_option('Status', commandName):
