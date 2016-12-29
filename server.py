@@ -32,19 +32,21 @@ class Server(BaseHTTPRequestHandler):
         
         elif 'sendCommand' in self.path:
             commandName = self.path.split('/')[2]
+            if 'on' in commandName or 'off' in commandName:
+                status = commandName.rsplit('o', 1)[1]
+                realcommandName = commandName.rsplit('o', 1)[0]
+                print(status,realcommandName)
+                if 'n' in status:
+                    setStatus(realcommandName, '1', True)
+                elif 'ff' in status:
+                    setStatus(realcommandName, '0', True)
             result = sendCommand(commandName)
             if result == False:
                 self.wfile.write("Failed: Unknonwn command")
             else:
                 self.wfile.write("Sent: %s" % commandName)
-                if 'on' or 'off' in commandName:
-                    status = commandName.rsplit('o', 1)[1]
-                    realcommandName = commandName.rsplit('o', 1)[0]
-                    print(status,realcommandName)
-                    if 'n' in status:
-                        setStatus(realcommandName, '1')
-                    if 'ff' in status:
-                        setStatus(realcommandName, '0')
+                
+
 
 
         elif 'getStatus' in self.path:
@@ -105,7 +107,7 @@ def sendCommand(commandName):
         finalCommand = encodedCommand[0x04:]    
         
         signal.signal(signal.SIGALRM, signal_handler)
-        signal.alarm(2)   # Ten seconds
+        signal.alarm(4)   # Ten seconds
         try:
             device.send_data(finalCommand)
         except Exception, msg:
@@ -139,7 +141,14 @@ def learnCommand(commandName):
     broadlinkControlIniFile.close()
     return True
 
-def setStatus(commandName, status):
+def setStatus(commandName, status, exist = False):
+    if exist:
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
+        settingsFile.set('Status', commandName, status)
+        settingsFile.write(broadlinkControlIniFile)
+        broadlinkControlIniFile.close()
+        return True
+
     if settingsFile.has_option('Status', commandName):
         commandFromSettings = settingsFile.get('Status', commandName)
     else:
