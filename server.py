@@ -4,6 +4,7 @@ import sys, getopt
 import time, binascii
 import netaddr
 import settings
+import signal
 from os import path
 from Crypto.Cipher import AES
 
@@ -38,7 +39,6 @@ class Server(BaseHTTPRequestHandler):
                 self.wfile.write("Sent: %s" % commandName)
                 if 'on' or 'off' in commandName:
                     status = commandName.rsplit('o', 1)[1]
-
                     realcommandName = commandName.rsplit('o', 1)[0]
                     print(status,realcommandName)
                     if 'n' in status:
@@ -66,6 +66,7 @@ class Server(BaseHTTPRequestHandler):
             commandName = self.path.split('/')[2]
             status = self.path.split('/')[3]
             result = setStatus(commandName, status)
+            print('Setting status %s of %s' % (commandName,status))
             if (result):
                 self.wfile.write("Set status of %s to %s" % (commandName, status))
             else:
@@ -95,14 +96,21 @@ def sendCommand(commandName):
     else:
         return False
 
+    print('sending command %s' % commandName)
     if commandFromSettings.strip() != '':
         decodedCommand = binascii.unhexlify(commandFromSettings)
         AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
         encodedCommand = AESEncryption.encrypt(str(decodedCommand))
         
         finalCommand = encodedCommand[0x04:]    
-        device.send_data(finalCommand)
-        return True
+        
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.alarm(2)   # Ten seconds
+        try:
+            device.send_data(finalCommand)
+        except Exception, msg:
+            print "Probably timed out.."
+            return True
 
 def learnCommand(commandName):
     device = broadlink.rm((RMIPAddress, RMPort), RMMACAddress)
@@ -168,6 +176,8 @@ def getA1Sensor(sensor):
         return result[sensor]
     return False 
 
+def signal_handler(signum, frame):
+    print ("Http timeout but the command should be already sent.")
         
 def start(server_class=HTTPServer, handler_class=Server, port=8080):
     server_address = ('', port)
