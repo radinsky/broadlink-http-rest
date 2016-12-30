@@ -80,8 +80,10 @@ class Server(BaseHTTPRequestHandler):
             if result == False:
                 self.wfile.write("Failed getting A1 data")
             else:
-                self.wfile.write('''{ "%s": %s }''' % (sensor, result))
-
+                if sensor == 'temperature' or sensor == 'humidity':
+                    self.wfile.write('''{ "%s": %s }''' % (sensor, result))
+                else:
+                    self.wfile.write('''{ "%s": "%s" }''' % (sensor, result))
         else:
             self.wfile.write("Failed")
 
