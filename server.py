@@ -9,6 +9,7 @@ from os import path
 from Crypto.Cipher import AES
 
 class Server(BaseHTTPRequestHandler):
+
     def _set_headers(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
@@ -87,6 +88,7 @@ class Server(BaseHTTPRequestHandler):
         else:
             self.wfile.write("Failed")
 
+serverPort = ''
 
 def sendCommand(commandName):
     device = broadlink.rm((RMIPAddress, RMPort), RMMACAddress)
@@ -190,7 +192,9 @@ def getA1Sensor(sensor):
 def signal_handler(signum, frame):
     print ("Http timeout but the command should be already sent.")
         
-def start(server_class=HTTPServer, handler_class=Server, port=8080):
+def start(server_class=HTTPServer, handler_class=Server, port=serverPort):
+
+
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
     print 'Starting broadlink-rest server on port %s ...' % port
@@ -247,4 +251,11 @@ if __name__ == "__main__":
     else:
         RealTimeout = int(RealTimeout.strip())    
 
-    start()
+
+    if settingsFile.has_option('General', 'serverPort'):
+        serverPort = int(settingsFile.get('General', 'serverPort'))
+    else:
+        serverPort = 8080
+
+
+    start(port=serverPort)
