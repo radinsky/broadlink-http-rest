@@ -5,14 +5,15 @@ import time, binascii
 import netaddr
 import settings
 import signal
+import socket
 from os import path
 from Crypto.Cipher import AES
 
 class Server(BaseHTTPRequestHandler):
-
     def _set_headers(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin','*')
         self.end_headers()
 
     def do_GET(self):
@@ -21,37 +22,49 @@ class Server(BaseHTTPRequestHandler):
             return False
 
         self._set_headers()
+        paths = self.path.split('/')
 
         if 'learnCommand' in self.path:
-            commandName = self.path.split('/')[2] 
-            result = learnCommand(commandName)
+            if paths[2] == 'learnCommand':
+                deviceName = paths[1]
+                commandName = paths[3]
+            else:
+                commandName = paths[2]
+                deviceName = None
+            result = learnCommand(commandName,deviceName)
             if result == False:
                 self.wfile.write("Failed: No command learned")
             else:
                 self.wfile.write("Learned: %s" % commandName)
 
-        
         elif 'sendCommand' in self.path:
-            commandName = self.path.split('/')[2]
+            if paths[2] == 'sendCommand':
+                deviceName = paths[1]
+                commandName = paths[3]
+            else:
+                commandName = paths[2]
+                deviceName = None
             if 'on' in commandName or 'off' in commandName:
                 status = commandName.rsplit('o', 1)[1]
                 realcommandName = commandName.rsplit('o', 1)[0]
-                print(status,realcommandName)
+                print(status, realcommandName)
                 if 'n' in status:
                     setStatus(realcommandName, '1', True)
                 elif 'ff' in status:
                     setStatus(realcommandName, '0', True)
-            result = sendCommand(commandName)
+            result = sendCommand(commandName, deviceName)
             if result == False:
                 self.wfile.write("Failed: Unknonwn command")
             else:
                 self.wfile.write("Sent: %s" % commandName)
-                
-
-
 
         elif 'getStatus' in self.path:
-            commandName = self.path.split('/')[2]
+            if paths[2] == 'getStatus':
+                commandName = paths[3]
+                deviceName = paths[1]
+            else:
+                commandName = paths[2]
+                deviceName = None
             if 'temp' in commandName:
                 result = getTempRM()
                 if result == False:
@@ -59,39 +72,40 @@ class Server(BaseHTTPRequestHandler):
                 else:
                     self.wfile.write('''{ "temperature": %s } ''' % result)
             else:
-                status = getStatus(commandName)
+                status = getStatus(commandName,deviceName)
                 if (status):
                     self.wfile.write(status)
                 else:
                     self.wfile.write("Failed: Unknown command")
-        
+
         elif 'setStatus' in self.path:
-            commandName = self.path.split('/')[2]
-            status = self.path.split('/')[3]
-            result = setStatus(commandName, status)
-            print('Setting status %s of %s' % (commandName,status))
+            if paths[2] == 'setStatus':
+                commandName = paths[3]
+                deviceName = paths[1]
+                status = paths[4]
+            else:
+                commandName = paths[2]
+                deviceName = None
+                status = paths[3]
+            result = setStatus(commandName, status, deviceName)
+            print('Setting status %s of %s' % (commandName, status))
             if (result):
                 self.wfile.write("Set status of %s to %s" % (commandName, status))
             else:
                 self.wfile.write("Failed: Unknown command")
 
-        elif 'a1'  in self.path:
-            sensor = self.path.split('/')[2]
-            result = getA1Sensor(sensor)
-            if result == False:
-                self.wfile.write("Failed getting A1 data")
-            else:
-                if sensor == 'temperature' or sensor == 'humidity':
-                    self.wfile.write('''{ "%s": %s }''' % (sensor, result))
-                else:
-                    self.wfile.write('''{ "%s": "%s" }''' % (sensor, result))
         else:
             self.wfile.write("Failed")
 
+
 serverPort = ''
 
-def sendCommand(commandName):
-    device = broadlink.rm((RMIPAddress, RMPort), RMMACAddress)
+
+def sendCommand(commandName,deviceName):
+    if deviceName == None:
+        device = devices[0]
+    else:
+        device = DeviceByName[deviceName];
     device.auth()
 
     deviceKey = device.key
@@ -102,52 +116,64 @@ def sendCommand(commandName):
     else:
         return False
 
-    print('sending command %s' % commandName)
+    print('     sending command %s' % commandName)
     if commandFromSettings.strip() != '':
         decodedCommand = binascii.unhexlify(commandFromSettings)
         AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
         encodedCommand = AESEncryption.encrypt(str(decodedCommand))
-        
-        finalCommand = encodedCommand[0x04:]    
-        
+
+        finalCommand = encodedCommand[0x04:]
+
+        try:
+            timeout = device.timeout
+        except:
+            timeout = 2
+            device.timeout = 2
+
         signal.signal(signal.SIGALRM, signal_handler)
-        signal.alarm(4)   # Ten seconds
+        signal.alarm(timeout+1)
+
         try:
             device.send_data(finalCommand)
-        except Exception, msg:
-            print "Probably timed out.."
+        except Exception:
+            print ("Probably timed out..")
             return True
 
-def learnCommand(commandName):
-    device = broadlink.rm((RMIPAddress, RMPort), RMMACAddress)
+
+def learnCommand(commandName, deviceName=None):
+    if deviceName == None:
+        device = devices[0]
+    else:
+        device = DeviceByName[deviceName];
     device.auth()
 
     deviceKey = device.key
     deviceIV = device.iv
 
     device.enter_learning()
-    time.sleep(RealTimeout)
+    time.sleep(GlobalTimeout)
     LearnedCommand = device.check_data()
 
     if LearnedCommand is None:
         print('Command not received')
         return False
 
-    AdditionalData = bytearray([0x00, 0x00, 0x00, 0x00])    
+    AdditionalData = bytearray([0x00, 0x00, 0x00, 0x00])
     finalCommand = AdditionalData + LearnedCommand
 
     AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
     decodedCommand = binascii.hexlify(AESEncryption.decrypt(str(finalCommand)))
 
-    broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
+    broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
     settingsFile.set('Commands', commandName, decodedCommand)
     settingsFile.write(broadlinkControlIniFile)
     broadlinkControlIniFile.close()
     return True
 
-def setStatus(commandName, status, exist = False):
+
+def setStatus(commandName, status, exist=False):
     if exist:
-        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
         settingsFile.set('Status', commandName, status)
         settingsFile.write(broadlinkControlIniFile)
         broadlinkControlIniFile.close()
@@ -158,13 +184,14 @@ def setStatus(commandName, status, exist = False):
     else:
         return False
     if commandFromSettings.strip() != '':
-        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
         settingsFile.set('Status', commandName, status)
         settingsFile.write(broadlinkControlIniFile)
         broadlinkControlIniFile.close()
         return True
     else:
         return False
+
 
 def getStatus(commandName):
     if settingsFile.has_option('Status', commandName):
@@ -173,32 +200,30 @@ def getStatus(commandName):
     else:
         return False
 
-def getTempRM():
-    device = broadlink.rm((RMIPAddress, RMPort), RMMACAddress)
+
+def getTempRM(deviceName=None):
+    if deviceName == None:
+        device = devices[0]
+    else:
+        device = DeviceByName[deviceName];
     device.auth()
     temperature = device.check_temperature()
     if temperature:
         return temperature
-    return False 
+    return False
 
-def getA1Sensor(sensor):
-    device = broadlink.a1((A1IPAddress, A1Port), A1MACAddress)
-    device.auth()
-    result = device.check_sensors()
-    if result:
-        return result[sensor]
-    return False 
 
 def signal_handler(signum, frame):
     print ("HTTP timeout, but the command should be already sent.")
-        
-def start(server_class=HTTPServer, handler_class=Server, port=serverPort):
 
 
-    server_address = ('', port)
+def start(server_class=HTTPServer, handler_class=Server, port=serverPort, listen='0.0.0.0', timeout=1):
+    server_address = (listen, port)
     httpd = server_class(server_address, handler_class)
-    print 'Starting broadlink-rest server on port %s ...' % port
+    httpd.timeout = timeout
+    print ('Starting broadlink-rest server on %s:%s ...' % (listen,port))
     httpd.serve_forever()
+
 
 if __name__ == "__main__":
 
@@ -206,56 +231,83 @@ if __name__ == "__main__":
     settingsFile.optionxform = str
     settingsFile.read(settings.settingsINI)
 
-    RMIPAddress = settings.RMIPAddress
-    if RMIPAddress.strip() == '':
-        print('IP address must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
+    global devices
+    global DeviceByName
+    global GlobalTimeout
 
-    RMPort = settings.RMPort
-    if RMPort.strip() == '':
-        print('Port must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        RMPort = int(RMPort.strip())
+    GlobalTimeout = 2
+    DiscoverTimeout = 5
+    serverPort = 8080
+    listen_address = '0.0.0.0'
+    broadcast_address = '255.255.255.255'
+    Dev = settings.Dev
 
-    RMMACAddress = settings.RMMACAddress
-    if RMMACAddress.strip() == '':
-        print('MAC address must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        RMMACAddress = netaddr.EUI(RMMACAddress)
+    if settingsFile.has_option('General', 'DiscoverTimeout'):
+        DiscoverTimeout = int(settingsFile.get('General', 'DiscoverTimeout').strip())
 
-    A1IPAddress = settings.A1IPAddress
-    if A1IPAddress.strip() == '':
-        print('IP address must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-
-    A1Port = settings.A1Port
-    if A1Port.strip() == '':
-        print('Port must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        A1Port = int(A1Port.strip())
-
-    A1MACAddress = settings.A1MACAddress
-    if A1MACAddress.strip() == '':
-        print('MAC address must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        A1MACAddress = netaddr.EUI(A1MACAddress)
-
-    RealTimeout = settings.Timeout
-    if RealTimeout.strip() == '':
-        print('Timeout must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        RealTimeout = int(RealTimeout.strip())    
-
+    if settingsFile.has_option('General', 'Timeout'):
+        DiscoverTimeout = int(settingsFile.get('General', 'Timeout').strip())
 
     if settingsFile.has_option('General', 'serverPort'):
         serverPort = int(settingsFile.get('General', 'serverPort'))
+
+    if settingsFile.has_option('General','serverAddress'):
+        listen_address = settingsFile.get('General', 'serverAddress')
+        if listen_address.strip() == '':
+            listen_address = '0.0.0.0'
+
+    if settingsFile.has_option('General','broadcastAddress'):
+        broadcast = settingsFile.get('General', 'broadcastAddress')
+        if broadcast_address.strip() == '':
+            broadcast_address = '255.255.255.255'
+
+    DeviceByName = {}
+    if not settings.DevList:
+        print ("Beginning device auto-detection ... ")
+        # Try to support multi-homed broadcast better
+        try:
+            devices = broadlink.discover(DiscoverTimeout,listen_address,broadcast_address)
+        except:
+            devices = broadlink.discover(DiscoverTimeout,listen_address)
+
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+        for device in devices:
+            device.hostname = socket.gethostbyaddr(device.host[0])[0]
+            DeviceByName[device.hostname] = device
+            if not settingsFile.has_section(device.hostname):
+                settingsFile.add_section(device.hostname)
+            settingsFile.set(device.hostname,'IPAddress',str(device.host[0]))
+            hexmac = ':'.join( [ "%02x" % ( x ) for x in reversed(device.mac) ] )
+            settingsFile.set(device.hostname,'MACAddress',hexmac)
+            settingsFile.set(device.hostname,'Device',hex(device.devtype))
+            settingsFile.set(device.hostname,'Timeout',str(device.timeout))
+            settingsFile.set(device.hostname,'Type',device.type.upper())
+            print ("%s: Found %s on %s (%s) type: %s" % (device.hostname, device.type, device.host, hexmac, hex(device.devtype)))
+        settingsFile.write(broadlinkControlIniFile)
+        broadlinkControlIniFile.close()
     else:
-        serverPort = 8080
+        devices = []
+        for devname in settings.DevList:
+            if Dev[devname,'Type'] == 'RM' or Dev[devname,'Type'] == 'RM2':
+                device = broadlink.rm((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'MP1':
+                device = broadlink.mp1((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'SP1':
+                device = broadlink.sp1((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'SP2':
+                device = broadlink.sp2((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'A1':
+                device = broadlink.a1((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'HYSEN':
+                device = broadlink.hysen((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'S1C':
+                device = broadlink.S1C((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'DOOYA':
+                device = broadlink.dooya((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            device.timeout = Dev[devname,'Timeout']
+            DeviceByName[devname] = device
+            device.hostname = devname
+            devices.append(device)
+            print ("%s: Found %s on %s (%s)" % (devname, device.type, str(device.host[0]), device.mac))
 
-
-    start(port=serverPort)
+    start(port=serverPort,listen=listen_address,timeout=GlobalTimeout)
