@@ -6,18 +6,41 @@ import netaddr
 import settings
 import signal
 import socket
+import errno
 from os import path
 from Crypto.Cipher import AES
 
-class Server(BaseHTTPRequestHandler):
+class Server(HTTPServer):
+    def get_request(self):
+        result = None
+        while result is None:
+            try:
+                result = self.socket.accept()
+                result[0].settimeout(self.timeout/10)
+            except socket.timeout:
+                pass
+        return result
+
+
+class Handler(BaseHTTPRequestHandler):
     def _set_headers(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin','*')
         self.end_headers()
 
-    def do_GET(self):
+    def handle(self):
+        self.close_connection = 0
 
+        while not self.close_connection:
+            try:
+                self.handle_one_request()
+            except IOError as e:
+                if e.errno == errno.EWOULDBLOCK:
+                    self.close_connection=1
+
+
+    def do_GET(self):
         if 'favicon' in self.path:
             return False
 
@@ -123,21 +146,15 @@ def sendCommand(commandName,deviceName):
 
         finalCommand = encodedCommand[0x04:]
 
-        try:
-            timeout = device.timeout
-        except:
-            timeout = 2
-            device.timeout = 2
-
-        signal.signal(signal.SIGALRM, signal_handler)
-        signal.alarm(timeout+1)
+        #timeout = device.timeout
+        #signal.signal(signal.SIGALRM, signal_handler)
+        #signal.alarm(timeout)
 
         try:
             device.send_data(finalCommand)
         except Exception:
             print ("Probably timed out..")
             return True
-
 
 def learnCommand(commandName, deviceName=None):
     if deviceName == None:
@@ -227,8 +244,7 @@ def getTempRM(deviceName=None):
 def signal_handler(signum, frame):
     print ("HTTP timeout, but the command should be already sent.")
 
-
-def start(server_class=HTTPServer, handler_class=Server, port=8080, listen='0.0.0.0', timeout=1):
+def start(server_class=Server, handler_class=Handler, port=8080, listen='0.0.0.0', timeout=1):
     server_address = (listen, port)
     httpd = server_class(server_address, handler_class)
     httpd.timeout = timeout
