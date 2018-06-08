@@ -101,15 +101,17 @@ class Server(BaseHTTPRequestHandler):
 def sendCommand(commandName,deviceName):
     if deviceName == None:
         device = devices[0]
+        serviceName = 'Commands'
     else:
         device = DeviceByName[deviceName];
+        serviceName = deviceName + ' Commands'
     device.auth()
 
     deviceKey = device.key
     deviceIV = device.iv
 
-    if settingsFile.has_option(deviceName + ' Commands', commandName):
-        commandFromSettings = settingsFile.get(deviceName + ' Commands', commandName)
+    if settingsFile.has_option(serviceName, commandName):
+        commandFromSettings = settingsFile.get(serviceName, commandName)
     elif settingsFile.has_option('Commands', commandName):
         commandFromSettings = settingsFile.get('Commands', commandName)
     else:
