@@ -18,6 +18,11 @@ need auto-detection for the next run.
 
 If you have more than one IP address, you can restrict serverAddress to an IP
 
+You may give multiple device sections with different names to organize your
+commands by device.  The plain "Commands" section is used when a device is
+not specified, and as a default should a command not be found in a device-
+specific section.
+
 2) Start python server.py
 
 If no devices are in settings.ini, note the names of the devices found.  These
