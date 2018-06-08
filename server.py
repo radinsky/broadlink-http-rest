@@ -105,7 +105,6 @@ def sendCommand(commandName,deviceName):
     else:
         device = DeviceByName[deviceName];
         serviceName = deviceName + ' Commands'
-    device.auth()
 
     deviceKey = device.key
     deviceIV = device.iv
@@ -147,7 +146,6 @@ def learnCommand(commandName, deviceName=None):
     else:
         device = DeviceByName[deviceName];
         sectionName = deviceName + ' Commands'
-    device.auth()
 
     deviceKey = device.key
     deviceIV = device.iv
@@ -220,7 +218,6 @@ def getTempRM(deviceName=None):
         device = devices[0]
     else:
         device = DeviceByName[deviceName];
-    device.auth()
     temperature = device.check_temperature()
     if temperature:
         return temperature
@@ -299,6 +296,7 @@ if __name__ == "__main__":
             settingsFile.set(device.hostname,'Device',hex(device.devtype))
             settingsFile.set(device.hostname,'Timeout',str(device.timeout))
             settingsFile.set(device.hostname,'Type',device.type.upper())
+            device.auth()
             print ("%s: Found %s on %s (%s) type: %s" % (device.hostname, device.type, device.host, hexmac, hex(device.devtype)))
         settingsFile.write(broadlinkControlIniFile)
         broadlinkControlIniFile.close()
@@ -324,6 +322,7 @@ if __name__ == "__main__":
             device.timeout = Dev[devname,'Timeout']
             DeviceByName[devname] = device
             device.hostname = devname
+            device.auth()
             devices.append(device)
             print ("%s: Found %s on %s (%s)" % (devname, device.type, str(device.host[0]), device.mac))
 
