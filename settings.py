@@ -13,7 +13,7 @@ Timeout = settings.get('General', 'Timeout')
 DevList = []
 Dev = defaultdict(dict)
 for section in settings.sections():
-    if section == 'General' or section == 'Commands' or section == 'Status':
+    if section == 'General' or 'Commands' in section or 'Status' in section:
         continue
     print ("Reading device configuration for %s" % section)
     Dev[section,'IPAddress'] = settings.get(section,'IPAddress').strip()
