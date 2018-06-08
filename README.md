@@ -12,13 +12,29 @@ Example usage
 
 1) Update settings.ini with your configuration
 
+You can erase the section for specific devices to have the system auto-detect.
+These settings will be rewritten to the settings.ini file so that it doesn't
+need auto-detection for the next run.
+
+If you have more than one IP address, you can restrict serverAddress to an IP
+
 2) Start python server.py
+
+If no devices are in settings.ini, note the names of the devices found.  These
+will be named by the hostname, so make sure the IP address resolves or enter
+it in /etc/hosts
 
 3) In your browser:
 ```
 http://localhost:8080/learnCommand/lampon   #learn command with name lampon
 http://localhost:8080/sendCommand/lampon    #send command with name lampon
 ```
+If you have more than one device, use the alternate syntax
+```
+http://localhost:8080/deviceName/learnCommand/lampon   #learn command with name lampon
+http://localhost:8080/deviceName/sendCommand/lampon    #send command with name lampon
+```
+
 4) Added get temperature from supported devices (like RM2/Pro):
 ```
 http://localhost:8080/getStatus/temperature
@@ -50,3 +66,4 @@ and etc..
 http://localhost:8080/sendCommand/lampon #automaticly set status of "lamp" to "on"
 http://localhost:8080/getStatus/lamp     #return lamp status as 0 or 1
 ```
+
