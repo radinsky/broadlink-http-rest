@@ -98,9 +98,6 @@ class Server(BaseHTTPRequestHandler):
             self.wfile.write("Failed")
 
 
-serverPort = ''
-
-
 def sendCommand(commandName,deviceName):
     if deviceName == None:
         device = devices[0]
@@ -111,11 +108,12 @@ def sendCommand(commandName,deviceName):
     deviceKey = device.key
     deviceIV = device.iv
 
-    if settingsFile.has_option('Commands', commandName):
+    if settingsFile.has_option(deviceName + ' Commands', commandName):
+        commandFromSettings = settingsFile.get(deviceName + ' Commands', commandName)
+    elif settingsFile.has_option('Commands', commandName):
         commandFromSettings = settingsFile.get('Commands', commandName)
     else:
         return False
-
     print('     sending command %s' % commandName)
     if commandFromSettings.strip() != '':
         decodedCommand = binascii.unhexlify(commandFromSettings)
@@ -143,8 +141,10 @@ def sendCommand(commandName,deviceName):
 def learnCommand(commandName, deviceName=None):
     if deviceName == None:
         device = devices[0]
+        sectionName = 'Commands'
     else:
         device = DeviceByName[deviceName];
+        sectionName = deviceName + ' Commands'
     device.auth()
 
     deviceKey = device.key
@@ -165,27 +165,35 @@ def learnCommand(commandName, deviceName=None):
     decodedCommand = binascii.hexlify(AESEncryption.decrypt(str(finalCommand)))
 
     broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-    settingsFile.set('Commands', commandName, decodedCommand)
+    if not settingsFile.has_section(sectionName):
+        settingsFile.add_section(sectionName)
+    settingsFile.set(sectionName, commandName, decodedCommand)
     settingsFile.write(broadlinkControlIniFile)
     broadlinkControlIniFile.close()
     return True
 
 
-def setStatus(commandName, status, exist=False):
+def setStatus(commandName, status, exist=False, deviceName=None):
+    if deviceName == None:
+        sectionName = deviceName + ' Status'
+    else:
+        sectionName = 'Status'
+    if not settingsFile.has_section(sectionName):
+        settingsFile.add_section(sectionName)
     if exist:
         broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-        settingsFile.set('Status', commandName, status)
+        settingsFile.set(sectionName, commandName, status)
         settingsFile.write(broadlinkControlIniFile)
         broadlinkControlIniFile.close()
         return True
 
-    if settingsFile.has_option('Status', commandName):
-        commandFromSettings = settingsFile.get('Status', commandName)
+    if settingsFile.has_option(sectionName, commandName):
+        commandFromSettings = settingsFile.get(sectionName, commandName)
     else:
         return False
     if commandFromSettings.strip() != '':
         broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-        settingsFile.set('Status', commandName, status)
+        settingsFile.set(sectionName, commandName, status)
         settingsFile.write(broadlinkControlIniFile)
         broadlinkControlIniFile.close()
         return True
@@ -193,9 +201,13 @@ def setStatus(commandName, status, exist=False):
         return False
 
 
-def getStatus(commandName):
-    if settingsFile.has_option('Status', commandName):
-        status = settingsFile.get('Status', commandName)
+def getStatus(commandName, deviceName=None):
+    if not deviceName == None:
+        sectionName = deviceName + ' Status'
+    else:
+        sectionName = 'Status'
+    if settingsFile.has_option(sectionName,commandName):
+        status = settingsFile.get(sectionName, commandName)
         return status
     else:
         return False
@@ -217,7 +229,7 @@ def signal_handler(signum, frame):
     print ("HTTP timeout, but the command should be already sent.")
 
 
-def start(server_class=HTTPServer, handler_class=Server, port=serverPort, listen='0.0.0.0', timeout=1):
+def start(server_class=HTTPServer, handler_class=Server, port=8080, listen='0.0.0.0', timeout=1):
     server_address = (listen, port)
     httpd = server_class(server_address, handler_class)
     httpd.timeout = timeout
@@ -235,6 +247,7 @@ if __name__ == "__main__":
     global DeviceByName
     global GlobalTimeout
 
+    # A few defaults
     GlobalTimeout = 2
     DiscoverTimeout = 5
     serverPort = 8080
@@ -242,6 +255,7 @@ if __name__ == "__main__":
     broadcast_address = '255.255.255.255'
     Dev = settings.Dev
 
+    # Override them
     if settingsFile.has_option('General', 'DiscoverTimeout'):
         DiscoverTimeout = int(settingsFile.get('General', 'DiscoverTimeout').strip())
 
@@ -261,6 +275,7 @@ if __name__ == "__main__":
         if broadcast_address.strip() == '':
             broadcast_address = '255.255.255.255'
 
+    # Device list
     DeviceByName = {}
     if not settings.DevList:
         print ("Beginning device auto-detection ... ")
