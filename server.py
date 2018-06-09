@@ -88,8 +88,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 commandName = paths[2]
                 deviceName = None
-            if 'temp' in commandName:
-                result = getTempRM()
+            if 'temp' in commandName:   # Should likely use getSensor instead
+                result = getSensor("temperature",deviceName)
                 if result == False:
                     self.wfile.write("Failed: Cannot get temperature")
                 else:
@@ -117,9 +117,23 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.wfile.write("Failed: Unknown command")
 
+        elif 'getSensor' in self.path or 'a1' in self.path:
+            if paths[2] == 'getSensor' or paths[2] == 'a1':
+                sensor = paths[3]
+                deviceName = paths[1]
+            else:
+                sensor = paths[2]
+                deviceName = None
+            result = getSensor(sensor, deviceName)
+            if result == False:
+                self.wfile.write("Failed to get data")
+            else:
+                if sensor == 'temperature' or sensor == 'humidity':
+                    self.wfile.write('''{ "%s": %s }''' % (sensor, result))
+                else:
+                    self.wfile.write('''{ "%s": "%s" }''' % (sensor, result))
         else:
             self.wfile.write("Failed")
-
 
 def sendCommand(commandName,deviceName):
     if deviceName == None:
@@ -192,9 +206,9 @@ def learnCommand(commandName, deviceName=None):
 
 def setStatus(commandName, status, exist=False, deviceName=None):
     if deviceName == None:
-        sectionName = deviceName + ' Status'
-    else:
         sectionName = 'Status'
+    else:
+        sectionName = deviceName + ' Status'
     if not settingsFile.has_section(sectionName):
         settingsFile.add_section(sectionName)
     if exist:
@@ -219,25 +233,30 @@ def setStatus(commandName, status, exist=False, deviceName=None):
 
 
 def getStatus(commandName, deviceName=None):
-    if not deviceName == None:
-        sectionName = deviceName + ' Status'
-    else:
+    if deviceName == None:
         sectionName = 'Status'
+    else:
+        sectionName = deviceName + ' Status'
+
     if settingsFile.has_option(sectionName,commandName):
         status = settingsFile.get(sectionName, commandName)
         return status
     else:
         return False
 
-
-def getTempRM(deviceName=None):
+def getSensor(sensorName,deviceName=None):
     if deviceName == None:
         device = devices[0]
     else:
         device = DeviceByName[deviceName];
-    temperature = device.check_temperature()
-    if temperature:
-        return temperature
+    if "RM" in device.type.upper() and sensorName == "temperature":
+        temperature = device.check_temperature()
+        if temperature:
+            return temperature
+    if "A1" in device.type.upper():
+        result = device.check_sensors()
+        if result:
+            return result[sensor]
     return False
 
 
