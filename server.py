@@ -282,14 +282,12 @@ if __name__ == "__main__":
     GlobalTimeout = 2
     DiscoverTimeout = 5
     serverPort = 8080
+    Autodetect = False
     listen_address = '0.0.0.0'
     broadcast_address = '255.255.255.255'
     Dev = settings.Dev
 
     # Override them
-    if settingsFile.has_option('General', 'DiscoverTimeout'):
-        DiscoverTimeout = int(settingsFile.get('General', 'DiscoverTimeout').strip())
-
     if settingsFile.has_option('General', 'Timeout'):
         DiscoverTimeout = int(settingsFile.get('General', 'Timeout').strip())
 
@@ -306,9 +304,20 @@ if __name__ == "__main__":
         if broadcast_address.strip() == '':
             broadcast_address = '255.255.255.255'
 
+    if settingsFile.has_option('General', 'Autodetect'):
+        try:
+            DiscoverTimeout = int(settingsFile.get('General', 'Autodetect').strip())
+        else:
+            DiscoverTimeout = 5
+        Autodetect = True
+        settingsFile.remove_option('General','Autodetect')
+
     # Device list
     DeviceByName = {}
     if not settings.DevList:
+        Autodetect = True
+
+    if Autodetect == True:
         print ("Beginning device auto-detection ... ")
         # Try to support multi-homed broadcast better
         try:
@@ -334,6 +343,7 @@ if __name__ == "__main__":
         broadlinkControlIniFile.close()
     else:
         devices = []
+    if settings.DevList:
         for devname in settings.DevList:
             if Dev[devname,'Type'] == 'RM' or Dev[devname,'Type'] == 'RM2':
                 device = broadlink.rm((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
@@ -352,10 +362,11 @@ if __name__ == "__main__":
             if Dev[devname,'Type'] == 'DOOYA':
                 device = broadlink.dooya((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
             device.timeout = Dev[devname,'Timeout']
+            if not devname in DeviceByName:
+                device.hostname = devname
+                device.auth()
+                devices.append(device)
             DeviceByName[devname] = device
-            device.hostname = devname
-            device.auth()
-            devices.append(device)
             print ("%s: Found %s on %s (%s)" % (devname, device.type, str(device.host[0]), device.mac))
 
     start(port=serverPort,listen=listen_address,timeout=GlobalTimeout)
