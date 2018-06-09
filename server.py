@@ -307,7 +307,7 @@ if __name__ == "__main__":
     if settingsFile.has_option('General', 'Autodetect'):
         try:
             DiscoverTimeout = int(settingsFile.get('General', 'Autodetect').strip())
-        else:
+        except:
             DiscoverTimeout = 5
         Autodetect = True
         settingsFile.remove_option('General','Autodetect')
