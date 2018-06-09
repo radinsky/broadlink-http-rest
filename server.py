@@ -366,7 +366,7 @@ if __name__ == "__main__":
                 device.hostname = devname
                 device.auth()
                 devices.append(device)
+                print ("%s: Found %s on %s (%s)" % (devname, device.type, str(device.host[0]), device.mac))
             DeviceByName[devname] = device
-            print ("%s: Found %s on %s (%s)" % (devname, device.type, str(device.host[0]), device.mac))
 
     start(port=serverPort,listen=listen_address,timeout=GlobalTimeout)
