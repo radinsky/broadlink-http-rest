@@ -160,15 +160,12 @@ def sendCommand(commandName,deviceName):
 
         finalCommand = encodedCommand[0x04:]
 
-        #timeout = device.timeout
-        #signal.signal(signal.SIGALRM, signal_handler)
-        #signal.alarm(timeout)
+    try:
+        device.send_data(finalCommand)
+    except Exception:
+        print ("Probably timed out..")
+    return True
 
-        try:
-            device.send_data(finalCommand)
-        except Exception:
-            print ("Probably timed out..")
-            return True
 
 def learnCommand(commandName, deviceName=None):
     if deviceName == None:
@@ -249,7 +246,7 @@ def getSensor(sensorName,deviceName=None):
         device = devices[0]
     else:
         device = DeviceByName[deviceName];
-    if "RM" in device.type.upper() and sensorName == "temperature":
+    if "RM" in device.type.upper() and "temp" in sensorName:
         temperature = device.check_temperature()
         if temperature:
             return temperature
