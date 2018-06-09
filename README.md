@@ -14,9 +14,14 @@ Example usage
 
 You can erase the section for specific devices to have the system auto-detect.
 These settings will be rewritten to the settings.ini file so that it doesn't
-need auto-detection for the next run.
+need auto-detection for the next run.  If you add a device, you can force
+autodetection by setting the "Autodetect" option to valid integer, the number
+of seconds to timeout the autodetection process.  When no devices are found
+and no Autodetect option is present, then Autodetection is forced with a
+timeout of 5 seconds.
 
 If you have more than one IP address, you can restrict serverAddress to an IP
+Likewise, serverPort can be changed from the default of 8080
 
 You may give multiple device sections with different names to organize your
 commands by device.  The plain "Commands" section is used when a device is
@@ -49,6 +54,7 @@ Returns:
 { "temperature": 22.2 } 
 ```
 *required JSON format suites [homebridge-http-temperature](https://github.com/metbosch/homebridge-http-temperature) plugin.
+Alternatively, see the new getSensor format below instead
 
 5) Added support for A1 sensors (temperature, lights and etc..)
 ```
@@ -65,6 +71,12 @@ Returns:
 and etc..
 ```
 *required JSON format suites [homebridge-http-temperature](https://github.com/metbosch/homebridge-http-temperature) plugin.
+Alternatively, use the new syntax
+```
+http://localhost:8080/SomeA1Device/getSensor/temperature
+```
+Where SomeA1Device is some valid A1 device.  You can also read the temperature from RM devices
+with this syntax.  This is likely the preferred method.
 
 6) Get and Set status of devices having COMMANDon and COMMANDoff abilities
 ```
