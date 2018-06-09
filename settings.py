@@ -9,7 +9,11 @@ settingsINI = path.join(applicationDir, 'settings.ini')
 settings = configparser.ConfigParser()
 settings.read(settingsINI)
 
-Timeout = settings.get('General', 'Timeout')
+if settings.has_option('General', 'Timeout'):
+    Timeout = settings.get('General', 'Timeout')
+else:
+    Timeout = 4
+
 DevList = []
 Dev = defaultdict(dict)
 for section in settings.sections():
