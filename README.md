@@ -12,21 +12,19 @@ Example usage
 
 1) Update settings.ini with your configuration
 
-You can erase the section for specific devices to have the system auto-detect.
-These settings will be rewritten to the settings.ini file so that it doesn't
-need auto-detection for the next run.  If you add a device, you can force
-autodetection by setting the "Autodetect" option to valid integer, the number
-of seconds to timeout the autodetection process.  When no devices are found
-and no Autodetect option is present, then Autodetection is forced with a
-timeout of 5 seconds.
+A blank file (you can erase it) is the easiest to start with, and the system will autodetect your devices.
 
-If you have more than one IP address, you can restrict serverAddress to an IP
-Likewise, serverPort can be changed from the default of 8080
+The [General] section contains the following optional parameters
+- **serverAddress** = IP to listen on, rather than 0.0.0.0
+- **serverPort** = listen port (defaults to 8080)
+- **learnFrom** = IP addresses that can issue new commands to learn from (default is any)
+- **broadcastAddress** = a pending patch to python-broadlink will allow device discover to use a specified broadcast IP
+- **Autodetect** = if set to anything, do device discovery and then remove this option
+- **allowOverwrite** = if set to anything, allow learned commands to overwrite an existing entry.  The default is to deny a command that is already learned
+- **restrictAccess** = restrict all operations to this list of IPs
+- **password** = allow password-protected POST operations from any address
 
-You may give multiple device sections with different names to organize your
-commands by device.  The plain "Commands" section is used when a device is
-not specified, and as a default should a command not be found in a device-
-specific section.
+If _password_ is specified, then GET operations are only allowed from hosts in _restrictAccess_.  GET operations won't need a password, but they'll only be allowed from specific hosts.  There is currently no way to restrict hosts AND require a password, but _serverAddress_ combined with firewall rules on the underlying host would be solution for the security paranoid, setting _password_ and not _restrictAccess_.
 
 2) Start python server.py
 
@@ -54,7 +52,6 @@ Returns:
 { "temperature": 22.2 } 
 ```
 *required JSON format suites [homebridge-http-temperature](https://github.com/metbosch/homebridge-http-temperature) plugin.
-Alternatively, see the new getSensor format below instead
 
 5) Added support for A1 sensors (temperature, lights and etc..)
 ```
@@ -71,12 +68,6 @@ Returns:
 and etc..
 ```
 *required JSON format suites [homebridge-http-temperature](https://github.com/metbosch/homebridge-http-temperature) plugin.
-Alternatively, use the new syntax
-```
-http://localhost:8080/SomeA1Device/getSensor/temperature
-```
-Where SomeA1Device is some valid A1 device.  You can also read the temperature from RM devices
-with this syntax.  This is likely the preferred method.
 
 6) Get and Set status of devices having COMMANDon and COMMANDoff abilities
 ```

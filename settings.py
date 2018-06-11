@@ -12,7 +12,7 @@ settings.read(settingsINI)
 if settings.has_option('General', 'Timeout'):
     Timeout = settings.get('General', 'Timeout')
 else:
-    Timeout = 4
+    Timeout = 5
 
 DevList = []
 Dev = defaultdict(dict)
@@ -25,7 +25,7 @@ for section in settings.sections():
     if settings.has_option(section,'Timeout'):
         Dev[section,'Timeout'] = int(settings.get(section, 'Timeout').strip())
     else:
-        Dev[section,'Timeout'] = 2
+        Dev[section,'Timeout'] = 8
     if settings.has_option(section,'Device'):
         Dev[section,'Device'] = int(settings.get(section, 'Device').strip(),16)
     else:

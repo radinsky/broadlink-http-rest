@@ -7,6 +7,7 @@ import settings
 import signal
 import socket
 import errno
+import json
 from os import path
 from Crypto.Cipher import AES
 
@@ -16,7 +17,8 @@ class Server(HTTPServer):
         while result is None:
             try:
                 result = self.socket.accept()
-                result[0].settimeout(self.timeout/10)
+                result[0].setblocking(0)
+                result[0].settimeout(self.timeout)
             except socket.timeout:
                 pass
         return result
@@ -39,8 +41,46 @@ class Handler(BaseHTTPRequestHandler):
                 if e.errno == errno.EWOULDBLOCK:
                     self.close_connection=1
 
-
     def do_GET(self):
+        try:
+            if GlobalPassword:
+                try:
+                    if RestrictAccess and self.client_address[0] not in RestrictAccess:
+                        return self.access_denied()
+                    return self.messageHandler()
+                except NameError:
+                    self.password_required()
+        except NameError:                   #- No security specified
+            self.messageHandler()
+
+    def do_POST(self):
+        try:
+            content_len = int(self.headers.getheader('content-length', 0))
+            parameters = json.loads(self.rfile.read(content_len));
+            try:
+                if GlobalPassword and GlobalPassword == parameters['password']:
+                    return self.messageHandler()
+            except NameError:
+                return self.password_required()
+        except:
+            pass
+        self.password_required()
+
+    def password_required(self):
+        response = "Password required from %s" % self.client_address[0]
+        self.wfile.write('''{ "error": "%s" }''' % response)
+        print (response)
+        self.close_connection = 1
+        return False
+
+    def access_denied(self):
+        response = "Client %s is not allowed!" % self.client_address[0]
+        self.wfile.write('''{ "error": "%s" }''' % response)
+        print (response)
+        self.close_connection = 1
+        return False
+
+    def messageHandler(self):
         if 'favicon' in self.path:
             return False
 
@@ -48,6 +88,13 @@ class Handler(BaseHTTPRequestHandler):
         paths = self.path.split('/')
 
         if 'learnCommand' in self.path:
+            try:
+                if self.client_address[0] not in LearnFrom:
+                    print ("Won't learn commands from %s.  Access Denied!" % self.client_address[0])
+                    return False
+            except NameError:
+                pass
+
             if paths[2] == 'learnCommand':
                 deviceName = paths[1]
                 commandName = paths[3]
@@ -56,9 +103,9 @@ class Handler(BaseHTTPRequestHandler):
                 deviceName = None
             result = learnCommand(commandName,deviceName)
             if result == False:
-                self.wfile.write("Failed: No command learned")
+                response = "Failed: No command learned"
             else:
-                self.wfile.write("Learned: %s" % commandName)
+                response = "Learned: %s" % commandName
 
         elif 'sendCommand' in self.path:
             if paths[2] == 'sendCommand':
@@ -77,9 +124,9 @@ class Handler(BaseHTTPRequestHandler):
                     setStatus(realcommandName, '0', True)
             result = sendCommand(commandName, deviceName)
             if result == False:
-                self.wfile.write("Failed: Unknonwn command")
+                response = "Failed: Unknown command"
             else:
-                self.wfile.write("Sent: %s" % commandName)
+                response = "Sent: %s" % commandName
 
         elif 'getStatus' in self.path:
             if paths[2] == 'getStatus':
@@ -91,15 +138,15 @@ class Handler(BaseHTTPRequestHandler):
             if 'temp' in commandName:   # Should likely use getSensor instead
                 result = getSensor("temperature",deviceName)
                 if result == False:
-                    self.wfile.write("Failed: Cannot get temperature")
+                    response = "Failed: Cannot get temperature"
                 else:
-                    self.wfile.write('''{ "temperature": %s } ''' % result)
+                    response = '''{ "temperature": %s } ''' % result
             else:
                 status = getStatus(commandName,deviceName)
                 if (status):
-                    self.wfile.write(status)
+                    response = status
                 else:
-                    self.wfile.write("Failed: Unknown command")
+                    response = "Failed: Unknown command"
 
         elif 'setStatus' in self.path:
             if paths[2] == 'setStatus':
@@ -111,11 +158,10 @@ class Handler(BaseHTTPRequestHandler):
                 deviceName = None
                 status = paths[3]
             result = setStatus(commandName, status, deviceName)
-            print('Setting status %s of %s' % (commandName, status))
             if (result):
-                self.wfile.write("Set status of %s to %s" % (commandName, status))
+                reponse = '''{ "%s": "%s" }''' % (commandName, status)
             else:
-                self.wfile.write("Failed: Unknown command")
+                response = "Failed: Unknown command"
 
         elif 'getSensor' in self.path or 'a1' in self.path:
             if paths[2] == 'getSensor' or paths[2] == 'a1':
@@ -126,14 +172,21 @@ class Handler(BaseHTTPRequestHandler):
                 deviceName = None
             result = getSensor(sensor, deviceName)
             if result == False:
-                self.wfile.write("Failed to get data")
+                reponse = "Failed to get data"
             else:
                 if sensor == 'temperature' or sensor == 'humidity':
-                    self.wfile.write('''{ "%s": %s }''' % (sensor, result))
+                    response = '''{ "%s": %s }''' % (sensor, result)
                 else:
-                    self.wfile.write('''{ "%s": "%s" }''' % (sensor, result))
+                    response = '''{ "%s": "%s" }''' % (sensor, result)
         else:
-            self.wfile.write("Failed")
+            response = "Failed"
+        if "Failed" in response:
+            self.wfile.write('''{ "error": "%s" }''' % response)
+        elif "Sent" in response:
+            self.wfile.write('''{ "ok": "%s" }''' % response)
+        else:
+            self.wfile.write (response);
+        print ("\t"+response)
 
 def sendCommand(commandName,deviceName):
     if deviceName == None:
@@ -152,7 +205,6 @@ def sendCommand(commandName,deviceName):
         commandFromSettings = settingsFile.get('Commands', commandName)
     else:
         return False
-    print('     sending command %s' % commandName)
     if commandFromSettings.strip() != '':
         decodedCommand = binascii.unhexlify(commandFromSettings)
         AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
@@ -174,6 +226,12 @@ def learnCommand(commandName, deviceName=None):
     else:
         device = DeviceByName[deviceName];
         sectionName = deviceName + ' Commands'
+
+    if OverwriteProtected and settingsFile.has_option(sectionName,commandName):
+        print ("Command %s alreadyExists and changes are protected!" % commandName)
+        return False
+
+    print ("Waiting %d seconds to capture command" % GlobalTimeout)
 
     deviceKey = device.key
     deviceIV = device.iv
@@ -256,10 +314,6 @@ def getSensor(sensorName,deviceName=None):
             return result[sensor]
     return False
 
-
-def signal_handler(signum, frame):
-    print ("HTTP timeout, but the command should be already sent.")
-
 def start(server_class=Server, handler_class=Handler, port=8080, listen='0.0.0.0', timeout=1):
     server_address = (listen, port)
     httpd = server_class(server_address, handler_class)
@@ -277,17 +331,25 @@ if __name__ == "__main__":
     global devices
     global DeviceByName
     global GlobalTimeout
+    global RestrictedAccess
+    global LearnFrom
+    global OverwriteProtected
+    global GlobalPassword
 
     # A few defaults
     GlobalTimeout = 2
     DiscoverTimeout = 5
     serverPort = 8080
     Autodetect = False
+    OverwriteProtected = True
     listen_address = '0.0.0.0'
     broadcast_address = '255.255.255.255'
     Dev = settings.Dev
 
     # Override them
+    if settingsFile.has_option('General', 'password'):
+        GlobalPassword = settingsFile.get('General', 'password').strip()
+
     if settingsFile.has_option('General', 'Timeout'):
         DiscoverTimeout = int(settingsFile.get('General', 'Timeout').strip())
 
@@ -298,6 +360,15 @@ if __name__ == "__main__":
         listen_address = settingsFile.get('General', 'serverAddress')
         if listen_address.strip() == '':
             listen_address = '0.0.0.0'
+
+    if settingsFile.has_option('General', 'restrictAccess'):
+        RestrictAccess = settingsFile.get('General', 'restrictAccess').strip()
+
+    if settingsFile.has_option('General', 'learnFrom'):
+        LearnFrom = settingsFile.get('General', 'learnFrom').strip();
+
+    if settingsFile.has_option('General', 'allowOverwrite'):
+        OverwriteProtected = False
 
     if settingsFile.has_option('General','broadcastAddress'):
         broadcast = settingsFile.get('General', 'broadcastAddress')
@@ -335,7 +406,7 @@ if __name__ == "__main__":
             hexmac = ':'.join( [ "%02x" % ( x ) for x in reversed(device.mac) ] )
             settingsFile.set(device.hostname,'MACAddress',hexmac)
             settingsFile.set(device.hostname,'Device',hex(device.devtype))
-            settingsFile.set(device.hostname,'Timeout',str(device.timeout))
+            settingsFile.set(device.hostname,'Timeout',str(device.timeout * 5))
             settingsFile.set(device.hostname,'Type',device.type.upper())
             device.auth()
             print ("%s: Found %s on %s (%s) type: %s" % (device.hostname, device.type, device.host, hexmac, hex(device.devtype)))
