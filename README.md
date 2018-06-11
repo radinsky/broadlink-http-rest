@@ -75,3 +75,7 @@ http://localhost:8080/sendCommand/lampon #automaticly set status of "lamp" to "o
 http://localhost:8080/getStatus/lamp     #return lamp status as 0 or 1
 ```
 
+7) Added simple Macro language
+Any Command can start with the word MACRO followed by a list of other commands.  Each command will be done in order.  You can use "sleep1", "sleep2", "sleep3", etc. to pause for the given number of seconds
+
+TODO/IDEA: Ability to test a status in the Macro and branch to another macro.
