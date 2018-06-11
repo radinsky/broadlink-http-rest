@@ -54,16 +54,21 @@ class Handler(BaseHTTPRequestHandler):
             self.messageHandler()
 
     def do_POST(self):
+        password = ''
         try:
             content_len = int(self.headers.getheader('content-length', 0))
-            parameters = json.loads(self.rfile.read(content_len));
-            try:
-                if GlobalPassword and GlobalPassword == parameters['password']:
-                    return self.messageHandler()
-            except NameError:
-                return self.password_required()
+            password = json.loads(self.rfile.read(content_len))['password'];
         except:
             pass
+        try:
+            if GlobalPassword and GlobalPassword == password:
+                return self.messageHandler()
+            else:
+                print ("TRY %s != %s" % (GlobalPassword, password))
+        except NameError:
+                print ("NameError")
+                return self.password_required()
+        print ("LSE %s != %s" % (GlobalPassword, parameters['password']))
         self.password_required()
 
     def password_required(self):
@@ -205,7 +210,15 @@ def sendCommand(commandName,deviceName):
         commandFromSettings = settingsFile.get('Commands', commandName)
     else:
         return False
+
     if commandFromSettings.strip() != '':
+        if commandFromSettings.startswith("MACRO "):
+            for command in commandFromSettings.strip().split():
+                if command.startswith("sleep"):
+                    time.sleep(int(command[5:]))
+                else:
+                    sendCommand(command,deviceName)
+            return True
         decodedCommand = binascii.unhexlify(commandFromSettings)
         AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
         encodedCommand = AESEncryption.encrypt(str(decodedCommand))
