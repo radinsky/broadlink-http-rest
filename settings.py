@@ -10,9 +10,9 @@ settings = configparser.ConfigParser()
 settings.read(settingsINI)
 
 if settings.has_option('General', 'Timeout'):
-    Timeout = settings.get('General', 'Timeout')
+    DiscoverTimeout = Timeout = settings.get('General', 'Timeout')
 else:
-    Timeout = 5
+    DiscoverTimeout = Timeout = 5
 
 DevList = []
 Dev = defaultdict(dict)

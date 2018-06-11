@@ -1,0 +1,44 @@
+Google Assistant Integration
+
+Since this project is capable of talking to various devices and automating
+various aspects, it's natural to want to link it up with your Google account
+and control it with your voice.
+
+Here is a somewhat simplified solution, but it works.  You'll need an IFTTT
+account (IF This Then That, https://ifttt.com) and either the app and/or Google
+Home device.  Your device running the server MUST be accessible from the 
+Internet, so you'll have to forward a port.  Sorry.
+
+If you don't have a static IP, visit duckdns.org to set up a free dynamic dns
+
+Security is an issue. If you have older code that depends on older GET requests
+you can add a line to settings.ini in the [General] section called
+"restrictAccess".  Old GET requests are restricted to only these IPs
+
+Ex: "restrictAccess = 192.168.12.156 192.168.12.200 192.168.12.155"
+
+Now, a password for everyone else to use in a POST
+
+Ex: "password = ILoveToHackGoogle"
+
+IFTTT is based on a Trigger, and a Service.  Select Google Assistant as the
+trigger and type or say the words you want as a trigger.  A response is totally
+optional.
+
+Ex: "I want to listen to some tunes"
+
+Now, when prompted select the Webhooks service.  Fill it out like so:
+  URL           http://myhostname:8080/LivingRoom/sendCommand/playSomeJazz
+  METHOD        Post
+  Content-Type  application/json
+  Body          { "password": "ILoveToHackGoogle" }
+
+Substitute your own hostname, deviceName, and command.  My command looks like:
+    playSomeJazz = MACRO iheartradio sleep9 up right ok sleep2 right 
+right right right ok
+
+Everything after the word MACRO are other commands, each a button.
+
+You can use IFTTT to do other home automations too.
+
+

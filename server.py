@@ -363,9 +363,6 @@ if __name__ == "__main__":
     if settingsFile.has_option('General', 'password'):
         GlobalPassword = settingsFile.get('General', 'password').strip()
 
-    if settingsFile.has_option('General', 'Timeout'):
-        DiscoverTimeout = int(settingsFile.get('General', 'Timeout').strip())
-
     if settingsFile.has_option('General', 'serverPort'):
         serverPort = int(settingsFile.get('General', 'serverPort'))
 

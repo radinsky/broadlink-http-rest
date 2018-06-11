@@ -17,9 +17,10 @@ A blank file (you can erase it) is the easiest to start with, and the system wil
 The [General] section contains the following optional parameters
 - **serverAddress** = IP to listen on, rather than 0.0.0.0
 - **serverPort** = listen port (defaults to 8080)
+- **Timeout** = Default timeout for network operations in tenths of a second
 - **learnFrom** = IP addresses that can issue new commands to learn from (default is any)
 - **broadcastAddress** = a pending patch to python-broadlink will allow device discover to use a specified broadcast IP
-- **Autodetect** = if set to anything, do device discovery and then remove this option
+- **Autodetect** = if set to a number, do device discover for the given number of seconds.  This option removes itself.
 - **allowOverwrite** = if set to anything, allow learned commands to overwrite an existing entry.  The default is to deny a command that is already learned
 - **restrictAccess** = restrict all operations to this list of IPs
 - **password** = allow password-protected POST operations from any address
