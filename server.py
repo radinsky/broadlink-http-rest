@@ -219,6 +219,20 @@ def sendCommand(commandName,deviceName):
     if commandFromSettings.strip() != '':
         if commandFromSettings.startswith("MACRO "):
             for command in commandFromSettings.strip().split():
+                if command == "sleep":
+                    time.sleep(1)
+                    continue
+                if "," in command:
+                    try:
+                        (actualCommand, repeatAmount) = command.split(',')
+                        for x in range(0,int(repeatAmount)):
+                            if actualCommand == "sleep":
+                                time.sleep(1)
+                            else:
+                                sendCommand(actualCommand,deviceName)
+                    except:
+                        print ("Skipping malformed command: %s" % command)
+                    continue
                 if command.startswith("sleep"):
                     try:
                         time.sleep(int(command[5:]))
@@ -227,6 +241,7 @@ def sendCommand(commandName,deviceName):
                         time.sleep(2)
                 else:
                     sendCommand(command,deviceName)
+
             return True
         decodedCommand = binascii.unhexlify(commandFromSettings)
         AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))

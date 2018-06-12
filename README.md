@@ -77,6 +77,11 @@ http://localhost:8080/getStatus/lamp     #return lamp status as 0 or 1
 ```
 
 7) Added simple Macro language
-Any Command can start with the word MACRO followed by a list of other commands.  Each command will be done in order.  You can use "sleep1", "sleep2", "sleep3", etc. to pause for the given number of seconds
+Any Command can start with the word MACRO followed by a list of other commands.
+Each command will be done in order.  You may repeat a command (useful for 
+navigating menus) by putting a comma followed a repeat count after the command.
+For example, "right,5" will send the "right" command 5 time. You can use also 
+use "sleep1", "sleep2", "sleep3", etc. to insert a pause.  In this case,
+a comma is optional.
 
 TODO/IDEA: Ability to test a status in the Macro and branch to another macro.
