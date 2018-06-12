@@ -174,12 +174,18 @@ class Handler(BaseHTTPRequestHandler):
                 response = "Failed: Unknown command"
 
         elif 'getSensor' in self.path or 'a1' in self.path:
-            if paths[2] == 'getSensor' or paths[2] == 'a1':
+            if paths[2] == 'getSensor':
                 sensor = paths[3]
                 deviceName = paths[1]
             else:
                 sensor = paths[2]
                 deviceName = None
+                #- Old syntax - find a compatible device
+                if "A1" == paths[2].upper[2]:
+                    for dev in devices:
+                        if "A1" == dev.type.upper():
+                            deviceName = dev.hostname
+                            break
             result = getSensor(sensor, deviceName)
             if result == False:
                 reponse = "Failed to get data"
