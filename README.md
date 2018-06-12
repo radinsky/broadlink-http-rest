@@ -84,4 +84,7 @@ For example, "right,5" will send the "right" command 5 time. You can use also
 use "sleep1", "sleep2", "sleep3", etc. to insert a pause.  In this case,
 a comma is optional.
 
+Note: It may be helpful to reload your changes with SIGUSR1 when developing
+macros.
+
 TODO/IDEA: Ability to test a status in the Macro and branch to another macro.
