@@ -23,6 +23,10 @@ class Server(HTTPServer):
                 pass
         return result
 
+    def server_bind(self):
+        HTTPServer.server_bind(self)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
 
 class Handler(BaseHTTPRequestHandler):
     def _set_headers(self):
@@ -48,7 +52,8 @@ class Handler(BaseHTTPRequestHandler):
                     if RestrictAccess and self.client_address[0] not in RestrictAccess:
                         return self.access_denied()
                     return self.messageHandler()
-                except NameError:
+                except NameError as e:
+                    print ("Error: %s" % e)
                     self.password_required()
         except NameError:                   #- No security specified
             self.messageHandler()
@@ -66,7 +71,6 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 print ("TRY %s != %s" % (GlobalPassword, password))
         except NameError:
-                print ("NameError")
                 return self.password_required()
         print ("LSE %s != %s" % (GlobalPassword, parameters['password']))
         self.password_required()
@@ -331,33 +335,34 @@ def start(server_class=Server, handler_class=Handler, port=8080, listen='0.0.0.0
     server_address = (listen, port)
     httpd = server_class(server_address, handler_class)
     httpd.timeout = timeout
-    print ('Starting broadlink-rest server on %s:%s ...' % (listen,port))
-    httpd.serve_forever()
+    print ('\nStarting broadlink-rest server on %s:%s ...' % (listen,port))
+    while not InterruptRequested:
+        httpd.handle_request()
 
-
-if __name__ == "__main__":
-
-    settingsFile = configparser.ConfigParser()
-    settingsFile.optionxform = str
-    settingsFile.read(settings.settingsINI)
-
+def readSettingsFile():
     global devices
     global DeviceByName
-    global GlobalTimeout
-    global RestrictedAccess
+    global RestrictAccess
     global LearnFrom
     global OverwriteProtected
     global GlobalPassword
+    global GlobalTimeout
+    global settingsFile
 
     # A few defaults
-    GlobalTimeout = 2
-    DiscoverTimeout = 5
     serverPort = 8080
     Autodetect = False
     OverwriteProtected = True
     listen_address = '0.0.0.0'
     broadcast_address = '255.255.255.255'
+
+    settingsFile = configparser.ConfigParser()
+    settingsFile.optionxform = str
+    settingsFile.read(settings.settingsINI)
+
     Dev = settings.Dev
+    GlobalTimeout = settings.GlobalTimeout
+    DiscoverTimeout = settings.DiscoverTimeout
 
     # Override them
     if settingsFile.has_option('General', 'password'):
@@ -449,5 +454,29 @@ if __name__ == "__main__":
                 devices.append(device)
                 print ("%s: Found %s on %s (%s)" % (devname, device.type, str(device.host[0]), device.mac))
             DeviceByName[devname] = device
+    return { "port": serverPort, "listen": listen_address, "timeout": GlobalTimeout }
 
-    start(port=serverPort,listen=listen_address,timeout=GlobalTimeout)
+def SigUsr1(signum, frame):
+    print ("\nReloading configuration ...")
+    global InterruptRequested
+    InterruptRequested = True
+
+def SigInt(signum, frame):
+    print ("\nShuting down server ...")
+    global ShutdownRequested
+    global InterruptRequested
+    ShutdownRequested = True
+    InterruptRequested = True
+
+if __name__ == "__main__":
+    global ShutdownRequested
+    global InteruptRequested
+    ShutdownRequested = False
+    signal.signal(signal.SIGUSR1,SigUsr1)
+    signal.signal(signal.SIGINT,SigInt)
+    while not ShutdownRequested:
+        serverParams = readSettingsFile()
+        InterruptRequested = False
+        start(**serverParams)
+        if not ShutdownRequested:
+            reload(settings)
