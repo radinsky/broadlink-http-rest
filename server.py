@@ -8,6 +8,7 @@ import signal
 import socket
 import errno
 import json
+import shutil
 from os import path
 from Crypto.Cipher import AES
 
@@ -219,7 +220,11 @@ def sendCommand(commandName,deviceName):
         if commandFromSettings.startswith("MACRO "):
             for command in commandFromSettings.strip().split():
                 if command.startswith("sleep"):
-                    time.sleep(int(command[5:]))
+                    try:
+                        time.sleep(int(command[5:]))
+                    except:
+                        print ("Invalid sleep time: %s" % command)
+                        time.sleep(2)
                 else:
                     sendCommand(command,deviceName)
             return True
@@ -267,42 +272,53 @@ def learnCommand(commandName, deviceName=None):
     AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
     decodedCommand = binascii.hexlify(AESEncryption.decrypt(str(finalCommand)))
 
-    broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-    if not settingsFile.has_section(sectionName):
-        settingsFile.add_section(sectionName)
-    settingsFile.set(sectionName, commandName, decodedCommand)
-    settingsFile.write(broadlinkControlIniFile)
-    broadlinkControlIniFile.close()
-    return True
-
+    backupSettings()
+    try:
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+        if not settingsFile.has_section(sectionName):
+            settingsFile.add_section(sectionName)
+        settingsFile.set(sectionName, commandName, decodedCommand)
+        settingsFile.write(broadlinkControlIniFile)
+        broadlinkControlIniFile.close()
+        return True
+    except StandardError as e:
+        print("Error writing settings file: %s" % e)
+        restoreSettings()
+        return False
 
 def setStatus(commandName, status, exist=False, deviceName=None):
     if deviceName == None:
         sectionName = 'Status'
     else:
         sectionName = deviceName + ' Status'
-    if not settingsFile.has_section(sectionName):
-        settingsFile.add_section(sectionName)
-    if exist:
-        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-        settingsFile.set(sectionName, commandName, status)
-        settingsFile.write(broadlinkControlIniFile)
-        broadlinkControlIniFile.close()
-        return True
 
-    if settingsFile.has_option(sectionName, commandName):
-        commandFromSettings = settingsFile.get(sectionName, commandName)
-    else:
-        return False
-    if commandFromSettings.strip() != '':
-        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-        settingsFile.set(sectionName, commandName, status)
-        settingsFile.write(broadlinkControlIniFile)
-        broadlinkControlIniFile.close()
-        return True
-    else:
-        return False
+    backupSettings()
+    try:
+        if not settingsFile.has_section(sectionName):
+            settingsFile.add_section(sectionName)
+        if exist:
+            broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+            settingsFile.set(sectionName, commandName, status)
+            settingsFile.write(broadlinkControlIniFile)
+            broadlinkControlIniFile.close()
+            return True
 
+        if settingsFile.has_option(sectionName, commandName):
+            commandFromSettings = settingsFile.get(sectionName, commandName)
+        else:
+            return False
+        if commandFromSettings.strip() != '':
+            broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+            settingsFile.set(sectionName, commandName, status)
+            settingsFile.write(broadlinkControlIniFile)
+            broadlinkControlIniFile.close()
+            return True
+        else:
+            return False
+    except StandardError as e:
+        print ("Error writing settings file: %s" % e)
+        restoreSettings()
+        return False
 
 def getStatus(commandName, deviceName=None):
     if deviceName == None:
@@ -338,6 +354,17 @@ def start(server_class=Server, handler_class=Handler, port=8080, listen='0.0.0.0
     print ('\nStarting broadlink-rest server on %s:%s ...' % (listen,port))
     while not InterruptRequested:
         httpd.handle_request()
+
+
+def backupSettings():
+    shutil.copy2(settings.settingsINI,settings.settingsINI+".bak")
+
+def restoreSettings():
+    if os.path.isfile(settings.settingsINI+".bak"):
+        shutil.copy2(settings.settingsINI+".bak",settings.settingsINI)
+    else:
+        print ("Can't find backup to restore!  Refusing to make this worse!")
+        sys.exit()
 
 def readSettingsFile():
     global devices
@@ -411,22 +438,34 @@ def readSettingsFile():
         except:
             devices = broadlink.discover(DiscoverTimeout,listen_address)
 
-        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-        for device in devices:
-            device.hostname = socket.gethostbyaddr(device.host[0])[0]
-            DeviceByName[device.hostname] = device
-            if not settingsFile.has_section(device.hostname):
-                settingsFile.add_section(device.hostname)
-            settingsFile.set(device.hostname,'IPAddress',str(device.host[0]))
-            hexmac = ':'.join( [ "%02x" % ( x ) for x in reversed(device.mac) ] )
-            settingsFile.set(device.hostname,'MACAddress',hexmac)
-            settingsFile.set(device.hostname,'Device',hex(device.devtype))
-            settingsFile.set(device.hostname,'Timeout',str(device.timeout * 5))
-            settingsFile.set(device.hostname,'Type',device.type.upper())
-            device.auth()
-            print ("%s: Found %s on %s (%s) type: %s" % (device.hostname, device.type, device.host, hexmac, hex(device.devtype)))
-        settingsFile.write(broadlinkControlIniFile)
-        broadlinkControlIniFile.close()
+        backupSettings()
+        try:
+            broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+            for device in devices:
+                try:
+                    device.hostname = socket.gethostbyaddr(device.host[0])[0]
+                    if "." in device.hostname:
+                        device.hostname = device.hostname.split('.')[0]
+                except:
+                    device.hostname = "Broadlink" + device.type.upper()
+                if device.hostname in DeviceByName:
+                    device.hostname = "%s-%s" % (device.hostname, str(device.host).split('.')[3])
+                DeviceByName[device.hostname] = device
+                if not settingsFile.has_section(device.hostname):
+                    settingsFile.add_section(device.hostname)
+                settingsFile.set(device.hostname,'IPAddress',str(device.host[0]))
+                hexmac = ':'.join( [ "%02x" % ( x ) for x in reversed(device.mac) ] )
+                settingsFile.set(device.hostname,'MACAddress',hexmac)
+                settingsFile.set(device.hostname,'Device',hex(device.devtype))
+                settingsFile.set(device.hostname,'Timeout',str(device.timeout))
+                settingsFile.set(device.hostname,'Type',device.type.upper())
+                device.auth()
+                print ("%s: Found %s on %s (%s) type: %s" % (device.hostname, device.type, device.host, hexmac, hex(device.devtype)))
+            settingsFile.write(broadlinkControlIniFile)
+            broadlinkControlIniFile.close()
+        except StandardError as e:
+            print ("Error writing settings file: %s" % e)
+            restoreSettings()
     else:
         devices = []
     if settings.DevList:
@@ -452,7 +491,7 @@ def readSettingsFile():
                 device.hostname = devname
                 device.auth()
                 devices.append(device)
-                print ("%s: Found %s on %s (%s)" % (devname, device.type, str(device.host[0]), device.mac))
+                print ("%s: Read %s on %s (%s)" % (devname, device.type, str(device.host[0]), device.mac))
             DeviceByName[devname] = device
     return { "port": serverPort, "listen": listen_address, "timeout": GlobalTimeout }
 
