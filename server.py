@@ -181,7 +181,7 @@ class Handler(BaseHTTPRequestHandler):
                 sensor = paths[2]
                 deviceName = None
                 #- Old syntax - find a compatible device
-                if "A1" == paths[2].upper[2]:
+                if "A1" == paths[2].upper()[:2]:
                     for dev in devices:
                         if "A1" == dev.type.upper():
                             deviceName = dev.hostname
@@ -365,7 +365,7 @@ def getSensor(sensorName,deviceName=None):
     if "A1" in device.type.upper():
         result = device.check_sensors()
         if result:
-            return result[sensor]
+            return result[sensorName]
     return False
 
 def start(server_class=Server, handler_class=Handler, port=8080, listen='0.0.0.0', timeout=1):
