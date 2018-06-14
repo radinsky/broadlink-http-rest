@@ -129,14 +129,14 @@ class Handler(BaseHTTPRequestHandler):
                 realcommandName = commandName.rsplit('o', 1)[0]
                 print(status, realcommandName)
                 if 'n' in status:
-                    setStatus(realcommandName, '1', True)
+                    setStatus(realcommandName, '1', deviceName)
                 elif 'ff' in status:
-                    setStatus(realcommandName, '0', True)
-            result = sendCommand(commandName, deviceName)
+                    setStatus(realcommandName, '0', deviceName)
+            result = getStatus(realcommandName, deviceName)
             if result == False:
                 response = "Failed: Unknown command"
             else:
-                response = "Sent: %s" % commandName
+                response = result
 
         elif 'getStatus' in self.path:
             if paths[2] == 'getStatus':
@@ -169,7 +169,7 @@ class Handler(BaseHTTPRequestHandler):
                 status = paths[3]
             result = setStatus(commandName, status, deviceName)
             if (result):
-                reponse = '''{ "%s": "%s" }''' % (commandName, status)
+                response = '''{ "%s": "%s" }''' % (commandName, status)
             else:
                 response = "Failed: Unknown command"
 
@@ -188,7 +188,7 @@ class Handler(BaseHTTPRequestHandler):
                             break
             result = getSensor(sensor, deviceName)
             if result == False:
-                reponse = "Failed to get data"
+                response = "Failed to get data"
             else:
                 if sensor == 'temperature' or sensor == 'humidity':
                     response = '''{ "%s": %s }''' % (sensor, result)
@@ -307,7 +307,7 @@ def learnCommand(commandName, deviceName=None):
         restoreSettings()
         return False
 
-def setStatus(commandName, status, exist=False, deviceName=None):
+def setStatus(commandName, status, deviceName=None):
     if deviceName == None:
         sectionName = 'Status'
     else:
@@ -317,25 +317,11 @@ def setStatus(commandName, status, exist=False, deviceName=None):
     try:
         if not settingsFile.has_section(sectionName):
             settingsFile.add_section(sectionName)
-        if exist:
-            broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-            settingsFile.set(sectionName, commandName, status)
-            settingsFile.write(broadlinkControlIniFile)
-            broadlinkControlIniFile.close()
-            return True
-
-        if settingsFile.has_option(sectionName, commandName):
-            commandFromSettings = settingsFile.get(sectionName, commandName)
-        else:
-            return False
-        if commandFromSettings.strip() != '':
-            broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-            settingsFile.set(sectionName, commandName, status)
-            settingsFile.write(broadlinkControlIniFile)
-            broadlinkControlIniFile.close()
-            return True
-        else:
-            return False
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+        settingsFile.set(sectionName, commandName, status)
+        settingsFile.write(broadlinkControlIniFile)
+        broadlinkControlIniFile.close()
+        return True
     except StandardError as e:
         print ("Error writing settings file: %s" % e)
         restoreSettings()
