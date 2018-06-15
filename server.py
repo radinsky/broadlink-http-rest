@@ -5,257 +5,524 @@ import time, binascii
 import netaddr
 import settings
 import signal
+import socket
+import errno
+import json
+import shutil
 from os import path
 from Crypto.Cipher import AES
 
-class Server(BaseHTTPRequestHandler):
+class Server(HTTPServer):
+    def get_request(self):
+        result = None
+        while result is None:
+            try:
+                result = self.socket.accept()
+                result[0].setblocking(0)
+                result[0].settimeout(self.timeout)
+            except socket.timeout:
+                pass
+        return result
 
+    def server_bind(self):
+        HTTPServer.server_bind(self)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+
+class Handler(BaseHTTPRequestHandler):
     def _set_headers(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin','*')
         self.end_headers()
 
-    def do_GET(self):
+    def handle(self):
+        self.close_connection = 0
 
+        while not self.close_connection:
+            try:
+                self.handle_one_request()
+            except IOError as e:
+                if e.errno == errno.EWOULDBLOCK:
+                    self.close_connection=1
+
+    def do_GET(self):
+        try:
+            if GlobalPassword:
+                try:
+                    if RestrictAccess and self.client_address[0] not in RestrictAccess:
+                        return self.access_denied()
+                    return self.messageHandler()
+                except NameError as e:
+                    print ("Error: %s" % e)
+                    self.password_required()
+        except NameError:                   #- No security specified
+            self.messageHandler()
+
+    def do_POST(self):
+        password = ''
+        try:
+            content_len = int(self.headers.getheader('content-length', 0))
+            password = json.loads(self.rfile.read(content_len))['password'];
+        except:
+            pass
+        try:
+            if GlobalPassword and GlobalPassword == password:
+                return self.messageHandler()
+            else:
+                print ("TRY %s != %s" % (GlobalPassword, password))
+        except NameError:
+                return self.password_required()
+        print ("LSE %s != %s" % (GlobalPassword, parameters['password']))
+        self.password_required()
+
+    def password_required(self):
+        response = "Password required from %s" % self.client_address[0]
+        self.wfile.write('''{ "error": "%s" }''' % response)
+        print (response)
+        self.close_connection = 1
+        return False
+
+    def access_denied(self):
+        response = "Client %s is not allowed!" % self.client_address[0]
+        self.wfile.write('''{ "error": "%s" }''' % response)
+        print (response)
+        self.close_connection = 1
+        return False
+
+    def messageHandler(self):
         if 'favicon' in self.path:
             return False
 
         self._set_headers()
+        paths = self.path.split('/')
 
         if 'learnCommand' in self.path:
-            commandName = self.path.split('/')[2] 
-            result = learnCommand(commandName)
-            if result == False:
-                self.wfile.write("Failed: No command learned")
-            else:
-                self.wfile.write("Learned: %s" % commandName)
+            try:
+                if self.client_address[0] not in LearnFrom:
+                    print ("Won't learn commands from %s.  Access Denied!" % self.client_address[0])
+                    return False
+            except NameError:
+                pass
 
-        
+            if paths[2] == 'learnCommand':
+                deviceName = paths[1]
+                commandName = paths[3]
+            else:
+                commandName = paths[2]
+                deviceName = None
+            result = learnCommand(commandName,deviceName)
+            if result == False:
+                response = "Failed: No command learned"
+            else:
+                response = "Learned: %s" % commandName
+
         elif 'sendCommand' in self.path:
-            commandName = self.path.split('/')[2]
+            if paths[2] == 'sendCommand':
+                deviceName = paths[1]
+                commandName = paths[3]
+            else:
+                commandName = paths[2]
+                deviceName = None
             if 'on' in commandName or 'off' in commandName:
                 status = commandName.rsplit('o', 1)[1]
                 realcommandName = commandName.rsplit('o', 1)[0]
-                print(status,realcommandName)
+                print(status, realcommandName)
                 if 'n' in status:
-                    setStatus(realcommandName, '1', True)
+                    setStatus(realcommandName, '1', deviceName)
                 elif 'ff' in status:
-                    setStatus(realcommandName, '0', True)
-            result = sendCommand(commandName)
+                    setStatus(realcommandName, '0', deviceName)
+            result = getStatus(realcommandName, deviceName)
             if result == False:
-                self.wfile.write("Failed: Unknonwn command")
+                response = "Failed: Unknown command"
             else:
-                self.wfile.write("Sent: %s" % commandName)
-                
-
-
+                response = result
 
         elif 'getStatus' in self.path:
-            commandName = self.path.split('/')[2]
-            if 'temp' in commandName:
-                result = getTempRM()
+            if paths[2] == 'getStatus':
+                commandName = paths[3]
+                deviceName = paths[1]
+            else:
+                commandName = paths[2]
+                deviceName = None
+            if 'temp' in commandName:   # Should likely use getSensor instead
+                result = getSensor("temperature",deviceName)
                 if result == False:
-                    self.wfile.write("Failed: Cannot get temperature")
+                    response = "Failed: Cannot get temperature"
                 else:
-                    self.wfile.write('''{ "temperature": %s } ''' % result)
+                    response = '''{ "temperature": %s } ''' % result
             else:
-                status = getStatus(commandName)
+                status = getStatus(commandName,deviceName)
                 if (status):
-                    self.wfile.write(status)
+                    response = status
                 else:
-                    self.wfile.write("Failed: Unknown command")
-        
-        elif 'setStatus' in self.path:
-            commandName = self.path.split('/')[2]
-            status = self.path.split('/')[3]
-            result = setStatus(commandName, status)
-            print('Setting status %s of %s' % (commandName,status))
-            if (result):
-                self.wfile.write("Set status of %s to %s" % (commandName, status))
-            else:
-                self.wfile.write("Failed: Unknown command")
+                    response = "Failed: Unknown command"
 
-        elif 'a1'  in self.path:
-            sensor = self.path.split('/')[2]
-            result = getA1Sensor(sensor)
+        elif 'setStatus' in self.path:
+            if paths[2] == 'setStatus':
+                commandName = paths[3]
+                deviceName = paths[1]
+                status = paths[4]
+            else:
+                commandName = paths[2]
+                deviceName = None
+                status = paths[3]
+            result = setStatus(commandName, status, deviceName)
+            if (result):
+                response = '''{ "%s": "%s" }''' % (commandName, status)
+            else:
+                response = "Failed: Unknown command"
+
+        elif 'getSensor' in self.path or 'a1' in self.path:
+            if paths[2] == 'getSensor':
+                sensor = paths[3]
+                deviceName = paths[1]
+            else:
+                sensor = paths[2]
+                deviceName = None
+                #- Old syntax - find a compatible device
+                if "A1" == paths[2].upper()[:2]:
+                    for dev in devices:
+                        if "A1" == dev.type.upper():
+                            deviceName = dev.hostname
+                            break
+            result = getSensor(sensor, deviceName)
             if result == False:
-                self.wfile.write("Failed getting A1 data")
+                response = "Failed to get data"
             else:
                 if sensor == 'temperature' or sensor == 'humidity':
-                    self.wfile.write('''{ "%s": %s }''' % (sensor, result))
+                    response = '''{ "%s": %s }''' % (sensor, result)
                 else:
-                    self.wfile.write('''{ "%s": "%s" }''' % (sensor, result))
+                    response = '''{ "%s": "%s" }''' % (sensor, result)
         else:
-            self.wfile.write("Failed")
+            response = "Failed"
+        if "Failed" in response:
+            self.wfile.write('''{ "error": "%s" }''' % response)
+        elif "Sent" in response:
+            self.wfile.write('''{ "ok": "%s" }''' % response)
+        else:
+            self.wfile.write (response);
+        print ("\t"+response)
 
-serverPort = ''
-
-def sendCommand(commandName):
-    device = broadlink.rm((RMIPAddress, RMPort), RMMACAddress)
-    device.auth()
+def sendCommand(commandName,deviceName):
+    if deviceName == None:
+        device = devices[0]
+        serviceName = 'Commands'
+    else:
+        device = DeviceByName[deviceName];
+        serviceName = deviceName + ' Commands'
 
     deviceKey = device.key
     deviceIV = device.iv
 
-    if settingsFile.has_option('Commands', commandName):
+    if settingsFile.has_option(serviceName, commandName):
+        commandFromSettings = settingsFile.get(serviceName, commandName)
+    elif settingsFile.has_option('Commands', commandName):
         commandFromSettings = settingsFile.get('Commands', commandName)
     else:
         return False
 
-    print('sending command %s' % commandName)
     if commandFromSettings.strip() != '':
+        if commandFromSettings.startswith("MACRO "):
+            for command in commandFromSettings.strip().split():
+                if command == "sleep":
+                    time.sleep(1)
+                    continue
+                if "," in command:
+                    try:
+                        (actualCommand, repeatAmount) = command.split(',')
+                        for x in range(0,int(repeatAmount)):
+                            if actualCommand == "sleep":
+                                time.sleep(1)
+                            else:
+                                sendCommand(actualCommand,deviceName)
+                    except:
+                        print ("Skipping malformed command: %s" % command)
+                    continue
+                if command.startswith("sleep"):
+                    try:
+                        time.sleep(int(command[5:]))
+                    except:
+                        print ("Invalid sleep time: %s" % command)
+                        time.sleep(2)
+                else:
+                    sendCommand(command,deviceName)
+
+            return True
         decodedCommand = binascii.unhexlify(commandFromSettings)
         AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
         encodedCommand = AESEncryption.encrypt(str(decodedCommand))
-        
-        finalCommand = encodedCommand[0x04:]    
-        
-        signal.signal(signal.SIGALRM, signal_handler)
-        signal.alarm(4)   # Ten seconds
-        try:
-            device.send_data(finalCommand)
-        except Exception, msg:
-            print "Probably timed out.."
-            return True
 
-def learnCommand(commandName):
-    device = broadlink.rm((RMIPAddress, RMPort), RMMACAddress)
-    device.auth()
+        finalCommand = encodedCommand[0x04:]
+
+    try:
+        device.send_data(finalCommand)
+    except Exception:
+        print ("Probably timed out..")
+    return True
+
+
+def learnCommand(commandName, deviceName=None):
+    if deviceName == None:
+        device = devices[0]
+        sectionName = 'Commands'
+    else:
+        device = DeviceByName[deviceName];
+        sectionName = deviceName + ' Commands'
+
+    if OverwriteProtected and settingsFile.has_option(sectionName,commandName):
+        print ("Command %s alreadyExists and changes are protected!" % commandName)
+        return False
+
+    print ("Waiting %d seconds to capture command" % GlobalTimeout)
 
     deviceKey = device.key
     deviceIV = device.iv
 
     device.enter_learning()
-    time.sleep(RealTimeout)
+    time.sleep(GlobalTimeout)
     LearnedCommand = device.check_data()
 
     if LearnedCommand is None:
         print('Command not received')
         return False
 
-    AdditionalData = bytearray([0x00, 0x00, 0x00, 0x00])    
+    AdditionalData = bytearray([0x00, 0x00, 0x00, 0x00])
     finalCommand = AdditionalData + LearnedCommand
 
     AESEncryption = AES.new(str(deviceKey), AES.MODE_CBC, str(deviceIV))
     decodedCommand = binascii.hexlify(AESEncryption.decrypt(str(finalCommand)))
 
-    broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
-    settingsFile.set('Commands', commandName, decodedCommand)
-    settingsFile.write(broadlinkControlIniFile)
-    broadlinkControlIniFile.close()
-    return True
-
-def setStatus(commandName, status, exist = False):
-    if exist:
-        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
-        settingsFile.set('Status', commandName, status)
+    backupSettings()
+    try:
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+        if not settingsFile.has_section(sectionName):
+            settingsFile.add_section(sectionName)
+        settingsFile.set(sectionName, commandName, decodedCommand)
         settingsFile.write(broadlinkControlIniFile)
         broadlinkControlIniFile.close()
         return True
-
-    if settingsFile.has_option('Status', commandName):
-        commandFromSettings = settingsFile.get('Status', commandName)
-    else:
+    except StandardError as e:
+        print("Error writing settings file: %s" % e)
+        restoreSettings()
         return False
-    if commandFromSettings.strip() != '':
-        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')    
-        settingsFile.set('Status', commandName, status)
+
+def setStatus(commandName, status, deviceName=None):
+    if deviceName == None:
+        sectionName = 'Status'
+    else:
+        sectionName = deviceName + ' Status'
+
+    backupSettings()
+    try:
+        if not settingsFile.has_section(sectionName):
+            settingsFile.add_section(sectionName)
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+        settingsFile.set(sectionName, commandName, status)
         settingsFile.write(broadlinkControlIniFile)
         broadlinkControlIniFile.close()
         return True
-    else:
+    except StandardError as e:
+        print ("Error writing settings file: %s" % e)
+        restoreSettings()
         return False
 
-def getStatus(commandName):
-    if settingsFile.has_option('Status', commandName):
-        status = settingsFile.get('Status', commandName)
+def getStatus(commandName, deviceName=None):
+    if deviceName == None:
+        sectionName = 'Status'
+    else:
+        sectionName = deviceName + ' Status'
+
+    if settingsFile.has_option(sectionName,commandName):
+        status = settingsFile.get(sectionName, commandName)
         return status
     else:
         return False
 
-def getTempRM():
-    device = broadlink.rm((RMIPAddress, RMPort), RMMACAddress)
-    device.auth()
-    temperature = device.check_temperature()
-    if temperature:
-        return temperature
-    return False 
+def getSensor(sensorName,deviceName=None):
+    if deviceName == None:
+        device = devices[0]
+    else:
+        device = DeviceByName[deviceName];
+    if "RM" in device.type.upper() and "temp" in sensorName:
+        temperature = device.check_temperature()
+        if temperature:
+            return temperature
+    if "A1" in device.type.upper():
+        result = device.check_sensors()
+        if result:
+            return result[sensorName]
+    return False
 
-def getA1Sensor(sensor):
-    device = broadlink.a1((A1IPAddress, A1Port), A1MACAddress)
-    device.auth()
-    result = device.check_sensors()
-    if result:
-        return result[sensor]
-    return False 
-
-def signal_handler(signum, frame):
-    print ("HTTP timeout, but the command should be already sent.")
-        
-def start(server_class=HTTPServer, handler_class=Server, port=serverPort):
-
-
-    server_address = ('', port)
+def start(server_class=Server, handler_class=Handler, port=8080, listen='0.0.0.0', timeout=1):
+    server_address = (listen, port)
     httpd = server_class(server_address, handler_class)
-    print 'Starting broadlink-rest server on port %s ...' % port
-    httpd.serve_forever()
+    httpd.timeout = timeout
+    print ('\nStarting broadlink-rest server on %s:%s ...' % (listen,port))
+    while not InterruptRequested:
+        httpd.handle_request()
 
-if __name__ == "__main__":
+
+def backupSettings():
+    shutil.copy2(settings.settingsINI,settings.settingsINI+".bak")
+
+def restoreSettings():
+    if os.path.isfile(settings.settingsINI+".bak"):
+        shutil.copy2(settings.settingsINI+".bak",settings.settingsINI)
+    else:
+        print ("Can't find backup to restore!  Refusing to make this worse!")
+        sys.exit()
+
+def readSettingsFile():
+    global devices
+    global DeviceByName
+    global RestrictAccess
+    global LearnFrom
+    global OverwriteProtected
+    global GlobalPassword
+    global GlobalTimeout
+    global settingsFile
+
+    # A few defaults
+    serverPort = 8080
+    Autodetect = False
+    OverwriteProtected = True
+    listen_address = '0.0.0.0'
+    broadcast_address = '255.255.255.255'
 
     settingsFile = configparser.ConfigParser()
     settingsFile.optionxform = str
     settingsFile.read(settings.settingsINI)
 
-    RMIPAddress = settings.RMIPAddress
-    if RMIPAddress.strip() == '':
-        print('IP address must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
+    Dev = settings.Dev
+    GlobalTimeout = settings.GlobalTimeout
+    DiscoverTimeout = settings.DiscoverTimeout
 
-    RMPort = settings.RMPort
-    if RMPort.strip() == '':
-        print('Port must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        RMPort = int(RMPort.strip())
-
-    RMMACAddress = settings.RMMACAddress
-    if RMMACAddress.strip() == '':
-        print('MAC address must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        RMMACAddress = netaddr.EUI(RMMACAddress)
-
-    A1IPAddress = settings.A1IPAddress
-    if A1IPAddress.strip() == '':
-        print('IP address must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-
-    A1Port = settings.A1Port
-    if A1Port.strip() == '':
-        print('Port must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        A1Port = int(A1Port.strip())
-
-    A1MACAddress = settings.A1MACAddress
-    if A1MACAddress.strip() == '':
-        print('MAC address must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        A1MACAddress = netaddr.EUI(A1MACAddress)
-
-    RealTimeout = settings.Timeout
-    if RealTimeout.strip() == '':
-        print('Timeout must exist in settings.ini or it should be entered as a command line parameter')
-        sys.exit(2)
-    else:
-        RealTimeout = int(RealTimeout.strip())    
-
+    # Override them
+    if settingsFile.has_option('General', 'password'):
+        GlobalPassword = settingsFile.get('General', 'password').strip()
 
     if settingsFile.has_option('General', 'serverPort'):
         serverPort = int(settingsFile.get('General', 'serverPort'))
+
+    if settingsFile.has_option('General','serverAddress'):
+        listen_address = settingsFile.get('General', 'serverAddress')
+        if listen_address.strip() == '':
+            listen_address = '0.0.0.0'
+
+    if settingsFile.has_option('General', 'restrictAccess'):
+        RestrictAccess = settingsFile.get('General', 'restrictAccess').strip()
+
+    if settingsFile.has_option('General', 'learnFrom'):
+        LearnFrom = settingsFile.get('General', 'learnFrom').strip();
+
+    if settingsFile.has_option('General', 'allowOverwrite'):
+        OverwriteProtected = False
+
+    if settingsFile.has_option('General','broadcastAddress'):
+        broadcast = settingsFile.get('General', 'broadcastAddress')
+        if broadcast_address.strip() == '':
+            broadcast_address = '255.255.255.255'
+
+    if settingsFile.has_option('General', 'Autodetect'):
+        try:
+            DiscoverTimeout = int(settingsFile.get('General', 'Autodetect').strip())
+        except:
+            DiscoverTimeout = 5
+        Autodetect = True
+        settingsFile.remove_option('General','Autodetect')
+
+    # Device list
+    DeviceByName = {}
+    if not settings.DevList:
+        Autodetect = True
+
+    if Autodetect == True:
+        print ("Beginning device auto-detection ... ")
+        # Try to support multi-homed broadcast better
+        try:
+            devices = broadlink.discover(DiscoverTimeout,listen_address,broadcast_address)
+        except:
+            devices = broadlink.discover(DiscoverTimeout,listen_address)
+
+        backupSettings()
+        try:
+            broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+            for device in devices:
+                try:
+                    device.hostname = socket.gethostbyaddr(device.host[0])[0]
+                    if "." in device.hostname:
+                        device.hostname = device.hostname.split('.')[0]
+                except:
+                    device.hostname = "Broadlink" + device.type.upper()
+                if device.hostname in DeviceByName:
+                    device.hostname = "%s-%s" % (device.hostname, str(device.host).split('.')[3])
+                DeviceByName[device.hostname] = device
+                if not settingsFile.has_section(device.hostname):
+                    settingsFile.add_section(device.hostname)
+                settingsFile.set(device.hostname,'IPAddress',str(device.host[0]))
+                hexmac = ':'.join( [ "%02x" % ( x ) for x in reversed(device.mac) ] )
+                settingsFile.set(device.hostname,'MACAddress',hexmac)
+                settingsFile.set(device.hostname,'Device',hex(device.devtype))
+                settingsFile.set(device.hostname,'Timeout',str(device.timeout))
+                settingsFile.set(device.hostname,'Type',device.type.upper())
+                device.auth()
+                print ("%s: Found %s on %s (%s) type: %s" % (device.hostname, device.type, device.host, hexmac, hex(device.devtype)))
+            settingsFile.write(broadlinkControlIniFile)
+            broadlinkControlIniFile.close()
+        except StandardError as e:
+            print ("Error writing settings file: %s" % e)
+            restoreSettings()
     else:
-        serverPort = 8080
+        devices = []
+    if settings.DevList:
+        for devname in settings.DevList:
+            if Dev[devname,'Type'] == 'RM' or Dev[devname,'Type'] == 'RM2':
+                device = broadlink.rm((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'MP1':
+                device = broadlink.mp1((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'SP1':
+                device = broadlink.sp1((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'SP2':
+                device = broadlink.sp2((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'A1':
+                device = broadlink.a1((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'HYSEN':
+                device = broadlink.hysen((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'S1C':
+                device = broadlink.S1C((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            if Dev[devname,'Type'] == 'DOOYA':
+                device = broadlink.dooya((Dev[devname,'IPAddress'], 80), Dev[devname,'MACAddress'], Dev[devname,'Device'])
+            device.timeout = Dev[devname,'Timeout']
+            if not devname in DeviceByName:
+                device.hostname = devname
+                device.auth()
+                devices.append(device)
+                print ("%s: Read %s on %s (%s)" % (devname, device.type, str(device.host[0]), device.mac))
+            DeviceByName[devname] = device
+    return { "port": serverPort, "listen": listen_address, "timeout": GlobalTimeout }
 
+def SigUsr1(signum, frame):
+    print ("\nReloading configuration ...")
+    global InterruptRequested
+    InterruptRequested = True
 
-    start(port=serverPort)
+def SigInt(signum, frame):
+    print ("\nShuting down server ...")
+    global ShutdownRequested
+    global InterruptRequested
+    ShutdownRequested = True
+    InterruptRequested = True
+
+if __name__ == "__main__":
+    global ShutdownRequested
+    global InteruptRequested
+    ShutdownRequested = False
+    signal.signal(signal.SIGUSR1,SigUsr1)
+    signal.signal(signal.SIGINT,SigInt)
+    while not ShutdownRequested:
+        serverParams = readSettingsFile()
+        InterruptRequested = False
+        start(**serverParams)
+        if not ShutdownRequested:
+            reload(settings)

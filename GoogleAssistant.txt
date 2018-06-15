@@ -1,0 +1,64 @@
+Google Assistant Integration
+
+Since this project is capable of talking to various devices and automating
+various aspects, it's natural to want to link it up with your Google account
+and control it with your voice.
+
+Here is a somewhat simplified solution, but it works.  You'll need an IFTTT
+account (IF This Then That, https://ifttt.com) and either the app and/or Google
+Home device.  Your device running the server MUST be accessible from the 
+Internet, so you'll have to forward a port.  Sorry.
+
+If you don't have a static IP, visit duckdns.org to set up a free dynamic dns
+
+Security is an issue. If you have older code that depends on older GET requests
+you can add a line to settings.ini in the [General] section called
+"restrictAccess".  Old GET requests are restricted to only these IPs
+
+Ex: "restrictAccess = 192.168.12.156 192.168.12.200 192.168.12.155"
+
+Now, a password for everyone else to use in a POST
+
+Ex: "password = ILoveToHackGoogle"
+
+IFTTT is based on a Trigger, and a Service.  Select Google Assistant as the
+trigger and type or say the words you want as a trigger.  A response is totally
+optional.
+
+Ex: "I want to listen to some tunes"
+
+Now, when prompted select the Webhooks service.  Fill it out like so:
+  URL           http://myhostname:8080/LivingRoom/sendCommand/playSomeJazz
+  METHOD        Post
+  Content-Type  application/json
+  Body          { "password": "ILoveToHackGoogle" }
+
+
+Substitute your own hostname, deviceName, and command.  I generally use macros
+for my commands.  This is a command that looks just like a regular command
+definition, except that the data is the word MACRO followed by a list of the
+commands that make up the macro.  You can add delays with "sleep1", "sleep2",
+"sleep3", etc.
+
+Here are a list of some of my macros.
+
+#- this is used like a constant in other macros to wait for the menu to appear
+waitForMenu = MACRO sleep11
+#- this opens the TV's main cast menu, it will turn on the TV if needed
+openMainMenu = MACRO castnow
+#- these are self explanatory
+increaseVolume = MACRO volup,4
+decreaseVolume = MACRO voldown,5
+#- Turns on the TV to iHeartRadio, waits, then selects a channel with arrows
+playSomeJazz = MACRO iheartradio waitForMenu up right ok sleep3 right,4 sleep1 ok
+#- Turn on the TV, turn down the AC while we wait, then arrow over to Haystack
+wakeUpTime = MACRO openMainMenu acdown,4 waitForMenu openNewsFromMain
+#- Turn off the TV, turn up the AC, and switch the amp to standby
+sleepyTime = MACRO power acup,4 amppower
+#- Complex macro for arrowing over to Haystack news
+watchTheNews = MACRO openMainMenu waitForMenu openNewsFromMain
+openNewsFromMain = MACRO down,3 sleep1 right,15 sleep1 ok
+
+
+You can use IFTTT to do other home automations too.
+
