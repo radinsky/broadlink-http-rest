@@ -40,8 +40,8 @@ http://localhost:8080/sendCommand/lampon    #send command with name lampon
 ```
 If you have more than one device, use the alternate syntax
 ```
-http://localhost:8080/deviceName/learnCommand/lampon   #learn command with name lampon
-http://localhost:8080/deviceName/sendCommand/lampon    #send command with name lampon
+http://localhost:8080/<deviceName from settings.ini>/learnCommand/lampon   #learn command with name lampon
+http://localhost:8080/<deviceName from settings.ini>/sendCommand/lampon    #send command with name lampon
 ```
 
 4) Added get temperature from supported devices (like RM2/Pro):
@@ -53,19 +53,23 @@ Returns:
 { "temperature": 22.2 } 
 ```
 *required JSON format suites [homebridge-http-temperature](https://github.com/metbosch/homebridge-http-temperature) plugin.
+* updated sensor handling allows also to use: ```http://localhost:8080/<deviceName from settings.ini>/getSensor/temperature```
 
 5) Added support for A1 sensors (temperature, lights and etc..)
 ```
-http://localhost:8080/a1/temperature
-http://localhost:8080/a1/lights
-http://localhost:8080/a1/noise
+http://localhost:8080/<A1 deviceName from settings.ini>/getSensor/noise
+```
+for example:
+```
+http://localhost:8080/BroadlinkA1/getSensor/light
+http://localhost:8080/BroadlinkA1/getSensor/temperature
 and etc..
 ```
 Returns:
 ```
 { "temperature": 22.2 } 
-{ "lights": dark } 
-{ "noise": low } 
+{ "lights": "dark" } 
+{ "noise": "quite" } 
 and etc..
 ```
 *required JSON format suites [homebridge-http-temperature](https://github.com/metbosch/homebridge-http-temperature) plugin.
