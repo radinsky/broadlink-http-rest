@@ -129,9 +129,9 @@ class Handler(BaseHTTPRequestHandler):
                 realcommandName = commandName.rsplit('o', 1)[0]
                 print(status, realcommandName)
                 if 'n' in status:
-                    setStatus(realcommandName, '1', True)
+                    setStatus(realcommandName, '1', deviceName)
                 elif 'ff' in status:
-                    setStatus(realcommandName, '0', True)
+                    setStatus(realcommandName, '0', deviceName)
                 result = getStatus(realcommandName, deviceName)
             else:
                 result = sendCommand(commandName, deviceName)
