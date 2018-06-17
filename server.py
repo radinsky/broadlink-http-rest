@@ -132,11 +132,13 @@ class Handler(BaseHTTPRequestHandler):
                     setStatus(realcommandName, '1', deviceName)
                 elif 'ff' in status:
                     setStatus(realcommandName, '0', deviceName)
-            result = getStatus(realcommandName, deviceName)
+                result = getStatus(realcommandName, deviceName)
+            else:
+                result = sendCommand(commandName, deviceName)
             if result == False:
                 response = "Failed: Unknown command"
             else:
-                response = result
+                response = "Sent: %s" % commandName
 
         elif 'getStatus' in self.path:
             if paths[2] == 'getStatus':
