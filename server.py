@@ -319,13 +319,11 @@ def setStatus(commandName, status, deviceName=None):
     try:
         if not settingsFile.has_section(sectionName):
             settingsFile.add_section(sectionName)
-            broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
-            settingsFile.set(sectionName, commandName, status)
-            settingsFile.write(broadlinkControlIniFile)
-            broadlinkControlIniFile.close()
-            return True
-        else:
-            return False
+        broadlinkControlIniFile = open(path.join(settings.applicationDir, 'settings.ini'), 'w')
+        settingsFile.set(sectionName, commandName, status)
+        settingsFile.write(broadlinkControlIniFile)
+        broadlinkControlIniFile.close()
+        return True
     except StandardError as e:
         print ("Error writing settings file: %s" % e)
         restoreSettings()
