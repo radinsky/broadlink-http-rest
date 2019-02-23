@@ -97,7 +97,14 @@ class Handler(BaseHTTPRequestHandler):
         self._set_headers()
         paths = self.path.split('/')
 
-        if 'learnCommand' in self.path:
+        if 'listCommand' in self.path:
+            result = listCommand()
+            if result == False:
+                response = "Failed: Found no command"
+            else:
+                response = json.dumps(result)
+
+        elif 'learnCommand' in self.path:
             try:
                 if self.client_address[0] not in LearnFrom:
                     print ("Won't learn commands from %s.  Access Denied!" % self.client_address[0])
@@ -203,6 +210,22 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.wfile.write (response);
         print ("\t"+response)
+
+def listCommand():
+    serviceName = 'Commands'
+    if settingsFile.has_section(serviceName):
+        commandFromSettings = list(settingsFile.items(serviceName))
+    else:
+        return False
+
+    # ordering commands
+    commandFromSettings.sort()
+    # get keys
+    commands = []
+    for (command, value) in commandFromSettings:
+        commands.append(command)
+
+    return commands
 
 def sendCommand(commandName,deviceName):
     if deviceName == None:
